@@ -33,7 +33,7 @@ The primary goals are to produce two key outputs:
 
 ## Datasets
 
-he analysis will be performed on three real-world datasets from:
+The analysis will be performed on three provided datasets from:
 
 - Baton Rouge
 
