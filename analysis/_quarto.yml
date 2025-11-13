@@ -1,5 +1,11 @@
 project:
   title: "Analysis"
+  output-dir: docs
 
-
-
+format: 
+    html:
+        embed-resources: true
+        title-block-banner: true
+        theme: darkly
+        toc: true
+        toc-depth: 4
