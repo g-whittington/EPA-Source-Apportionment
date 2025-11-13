@@ -32,9 +32,9 @@ Where the *_con files represent the readings from the detection device and the *
 
 ## Useful Reference for modeling later
 
-[R code example doing Non-Negative Matrix Factorization](https://cloud.r-project.org/web/packages/pcpr/vignettes/pcp-applied.html)
+<a href="https://cloud.r-project.org/web/packages/pcpr/vignettes/pcp-applied.html" target="_blank" rel="noopener noreferrer">R code example doing Non-Negative Matrix Factorization</a>
 
 ## References
 
-[Powerpoint also on elc. This is Rizzo](https://www.nrcs.usda.gov/sites/default/files/2022-10/4-Source-Apportionment.pdf)
+<a href="https://www.nrcs.usda.gov/sites/default/files/2022-10/4-Source-Apportionment.pdf" target="_blank" rel="noopener noreferrer">Powerpoint also on elc. This is Rizzo</a>
 
