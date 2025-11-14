@@ -1,7 +1,44 @@
 ---
-title: "fall_presentation"
+title: Statistical Capstone Fall Presentation
+subtitle: EPA Source Apportionment
+author:
+    - Deeya Datta
+    - Prateek Mishra
+    - George Whittington
 ---
 
-## Quarto
+# Introduction & Background
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+## Client
+
+Stuff about client
+
+## Source Apportionment
+
+What even is this
+
+# Research Question
+
+## Primary goals
+
+maybe from slides
+
+## Extra goals
+
+what we also thing we could do
+
+# Exploratory Data Analysis
+
+## Background on data
+
+what is the data we were given
+
+## EDA Stuff
+
+the meat of this semester
+
+# Questions?
+
+## Make the slides better
+
+<a href="https://quarto.org/docs/presentations/revealjs/" target=_blank rel="noreferrer noopener">Link to the docs for slide customization</a>
