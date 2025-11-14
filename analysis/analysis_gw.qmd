@@ -13,6 +13,12 @@ library(tidyverse)
 library(here)
 ```
 
+```{r}
+#| label: load-helper-functions
+
+source(here("analysis", "helper.R"))
+```
+
 # Source Apportionment
 
 Source apportionment is a "collection of techniques to provide information regarding how much a source (usually a generalized category) contributes to the overall pollutant concentration at receptor (usually a monitoring site)" (Rizzo, 2010).
@@ -49,7 +55,17 @@ baltimore_concentration <- read_csv(here("data", "Dataset-Baltimore_con.csv"))
 baltimore_uncertainty <- read_csv(here("data", "Dataset-Baltimore_unc.csv"))
 ```
 
+### Concentration
+
+```{r}
+glimpse(baltimore_concentration)
+```
+
+### Uncertainty
+
 ## BatonRouge
+
+Read in both concentration and uncertainty files
 
 ```{r}
 #| label: load-baton-rouge
@@ -59,6 +75,8 @@ baton_rouge_uncertainty <- read_csv(here("data", "Dataset-BatonRouge-unc.csv"))
 ```
 
 ## StLouis
+
+Read in both concentration and uncertainty files
 
 ```{r}
 #| label: load-st-louis
