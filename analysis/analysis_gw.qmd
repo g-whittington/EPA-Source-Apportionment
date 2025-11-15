@@ -13,6 +13,7 @@ date-format: long
 
 library(tidyverse)
 library(here)
+library(gt)
 ```
 
 ```{r}
@@ -70,6 +71,19 @@ baltimore_uncertainty <- read_csv(here("data", "Dataset-Baltimore_unc.csv")) |> 
 #| label: first-glimpse-baltimore-concentration
 
 glimpse(baltimore_concentration)
+```
+
+Here we can see the data type and a top glimpse into the value of each of the columns. Here can see there is one column of dates, and then the concentration of each of the chemical/elements give as a double. 
+
+```{r}
+#| label: tbl-head-tail
+#| tbl-cap: First and Last 5 Rows
+
+bind_rows(
+    baltimore_concentration |> slice_head(n = 5),
+    baltimore_concentration |> slice_tail(n = 5)
+) |> 
+    gt()
 ```
 
 ### Uncertainty
