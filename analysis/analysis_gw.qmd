@@ -5,12 +5,21 @@ date: today
 date-format: long
 ---
 
+# Set Up
+
 ```{r}
 #| label: libraries
 #| output: false
 
 library(tidyverse)
 library(here)
+```
+
+```{r}
+#| label: configure-here
+#| output: false
+
+i_am("analysis/analysis_gw.qmd")
 ```
 
 ```{r}
@@ -51,13 +60,15 @@ Read in both concentration and uncertainty files
 ```{r}
 #| label: load-baltimore
 
-baltimore_concentration <- read_csv(here("data", "Dataset-Baltimore_con.csv"))
-baltimore_uncertainty <- read_csv(here("data", "Dataset-Baltimore_unc.csv"))
+baltimore_concentration <- read_csv(here("data", "Dataset-Baltimore_con.csv")) |> convert_to_date()
+baltimore_uncertainty <- read_csv(here("data", "Dataset-Baltimore_unc.csv")) |> convert_to_date()
 ```
 
 ### Concentration
 
 ```{r}
+#| label: first-glimpse-baltimore-concentration
+
 glimpse(baltimore_concentration)
 ```
 
@@ -70,8 +81,8 @@ Read in both concentration and uncertainty files
 ```{r}
 #| label: load-baton-rouge
 
-baton_rouge_concentration <- read_csv(here("data", "Dataset-BatonRouge-con.csv"))
-baton_rouge_uncertainty <- read_csv(here("data", "Dataset-BatonRouge-unc.csv"))
+baton_rouge_concentration <- read_csv(here("data", "Dataset-BatonRouge-con.csv")) |> convert_to_date()
+baton_rouge_uncertainty <- read_csv(here("data", "Dataset-BatonRouge-unc.csv")) |> convert_to_date()
 ```
 
 ## StLouis
@@ -81,8 +92,8 @@ Read in both concentration and uncertainty files
 ```{r}
 #| label: load-st-louis
 
-st_louis_concentration <- read_csv(here("data", "Dataset-StLouis-con.csv"))
-st_louis_uncertainty <- read_csv(here("data", "Dataset-StLouis-unc.csv"))
+st_louis_concentration <- read_csv(here("data", "Dataset-StLouis-con.csv")) |> convert_to_date()
+st_louis_uncertainty <- read_csv(here("data", "Dataset-StLouis-unc.csv")) |> convert_to_date()
 ```
 
 # Links
