@@ -28,10 +28,11 @@ convert_to_date <- function(data, col_name = "Date") {
 #' 
 #' @param data_con A tibble or dataframe containing the concentration data
 #' @param data_unc A tibble or dataframe containing the uncertainty data
+#' @param file_name String. file name to save data as
 #' 
 #' @return NUll. It creates a combined csv file
 #' @export
-write_long_data <- function(data_con, data_unc) {
+write_long_data <- function(data_con, data_unc, file_name) {
   # keep the data column as it and move the names and values of each component to a row
   data_con_long <- data_con |> 
     pivot_longer(
@@ -58,5 +59,5 @@ write_long_data <- function(data_con, data_unc) {
         Uncertainty_Ratio = Uncertainty / Concentration
       )
   
-  write_csv(combined, here("data/"))
+  write_csv(combined, here("data", file_name))
 }
