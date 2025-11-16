@@ -61,8 +61,8 @@ Read in both concentration and uncertainty files
 ```{r}
 #| label: load-baltimore
 
-baltimore_concentration <- read_csv(here("data", "Dataset-Baltimore_con.csv")) |> convert_to_date()
-baltimore_uncertainty <- read_csv(here("data", "Dataset-Baltimore_unc.csv")) |> convert_to_date()
+baltimore_concentration <- read_csv(here("data/Dataset-Baltimore_con.csv")) |> convert_to_date()
+baltimore_uncertainty <- read_csv(here("data/Dataset-Baltimore_unc.csv")) |> convert_to_date()
 ```
 
 ### Concentration
@@ -95,9 +95,19 @@ Read in both concentration and uncertainty files
 ```{r}
 #| label: load-baton-rouge
 
-baton_rouge_concentration <- read_csv(here("data", "Dataset-BatonRouge-con.csv")) |> convert_to_date()
-baton_rouge_uncertainty <- read_csv(here("data", "Dataset-BatonRouge-unc.csv")) |> convert_to_date()
+baton_rouge_concentration <- read_csv(here("data/Dataset-BatonRouge-con.csv")) |> convert_to_date()
+baton_rouge_uncertainty <- read_csv(here("data/Dataset-BatonRouge-unc.csv")) |> convert_to_date()
 ```
+
+### Concentration
+
+```{r}
+#| label: first-glimpse-baton-rouge-concentration
+
+glimpse(baton_rouge_concentration)
+```
+
+### Uncertainty
 
 ## StLouis
 
@@ -106,9 +116,19 @@ Read in both concentration and uncertainty files
 ```{r}
 #| label: load-st-louis
 
-st_louis_concentration <- read_csv(here("data", "Dataset-StLouis-con.csv")) |> convert_to_date()
-st_louis_uncertainty <- read_csv(here("data", "Dataset-StLouis-unc.csv")) |> convert_to_date()
+st_louis_concentration <- read_csv(here("data/Dataset-StLouis-con.csv")) |> convert_to_date()
+st_louis_uncertainty <- read_csv(here("data/Dataset-StLouis-unc.csv")) |> convert_to_date()
 ```
+
+### Concentration
+
+```{r}
+#| label: first-glimpse-st-louis-concentration
+
+glimpse(st_louis_concentration)
+```
+
+### Uncertainty
 
 # Links
 
