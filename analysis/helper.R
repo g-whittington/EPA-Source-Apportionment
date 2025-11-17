@@ -1,6 +1,9 @@
 # Programmer: George Whittington
 # Date: Purpose: Defied functions to help in data exploration
 
+library(tidyverse)
+library(here)
+
 i_am("analysis/helper.R")
 
 #' Fix EPA Date Formatting
