@@ -19,7 +19,6 @@ import numpy as np
 import altair as alt
 import great_tables
 
-import sys
 from pyhere import here
 ```
 
@@ -82,13 +81,13 @@ baltimore_concentration = pl.read_csv(here("data/Dataset-Baltimore_con.csv"))
 baltimore_uncertainty = pl.read_csv(here("data/Dataset-Baltimore_unc.csv"))
 
 # convert the Date column to a proper date
-baltimore_concentration = baltimore_concentration.with_columns(
+baltimore_concentration_log = baltimore_concentration.with_columns(
     pl.col("Date").str.to_date(r"%m/%d/%Y"),
-    pl.all().exclude("Date").cast(pl.Decimal(scale=5))
+    cs.numeric().log1p()
 )
-baltimore_uncertainty = baltimore_uncertainty.with_columns(
+baltimore_uncertainty_log = baltimore_uncertainty.with_columns(
     pl.col("Date").str.to_date(r"%m/%d/%Y"),
-    pl.all().exclude("Date").cast(pl.Decimal(scale=5))
+    cs.numeric().log1p()
 )
 ```
 
@@ -97,7 +96,9 @@ baltimore_uncertainty = baltimore_uncertainty.with_columns(
 ```{python}
 #| label: first-glimpse-baltimore-concentration
 
-baltimore_concentration.glimpse()
+baltimore_concentration_log.with_columns(
+    cs.numeric().round(5)
+).glimpse()
 ```
 
 Here we can see the data type and a top glimpse into the value of each of the
@@ -110,10 +111,11 @@ of each of the chemical/elements give as a double.
 
 (
     pl.concat([
-        baltimore_concentration.head(5),
-        baltimore_concentration.tail(5)
+        baltimore_concentration_log.head(5),
+        baltimore_concentration_log.tail(5)
     ])
     .style
+    .fmt_number(cs.numeric(), decimals=5)
 )
 ```
 
@@ -131,13 +133,13 @@ baton_rouge_concentration = pl.read_csv(here("data/Dataset-BatonRouge-con.csv"))
 baton_rouge_uncertainty = pl.read_csv(here("data/Dataset-BatonRouge-unc.csv"))
 
 # convert the Date column to a proper date
-baton_rouge_concentration = baton_rouge_concentration.with_columns(
+baton_rouge_concentration_log = baton_rouge_concentration.with_columns(
     pl.col("Date").str.to_datetime(r"%m/%d/%Y %H:%M"),
-    pl.all().exclude("Date").cast(pl.Decimal(scale=5))
+    cs.numeric().log1p()
 )
-baton_rouge_uncertainty = baton_rouge_uncertainty.with_columns(
+baton_rouge_uncertainty_log = baton_rouge_uncertainty.with_columns(
     pl.col("Date").str.to_datetime(r"%m/%d/%Y %H:%M"),
-    pl.all().exclude("Date").cast(pl.Decimal(scale=5))
+    cs.numeric().log1p()
 )
 ```
 
@@ -146,7 +148,9 @@ baton_rouge_uncertainty = baton_rouge_uncertainty.with_columns(
 ```{python}
 #| label: first-glimpse-baton-rouge-concentration
 
-baton_rouge_concentration.glimpse()
+baton_rouge_concentration_log.with_columns(
+    cs.numeric().round(5)
+).glimpse()
 ```
 
 ```{python}
@@ -155,8 +159,8 @@ baton_rouge_concentration.glimpse()
 
 (
     pl.concat([
-        baton_rouge_concentration.head(5),
-        baton_rouge_concentration.tail(5)
+        baton_rouge_concentration_log.head(5),
+        baton_rouge_concentration_log.tail(5)
     ])
     .style
     .fmt_datetime(
@@ -164,6 +168,7 @@ baton_rouge_concentration.glimpse()
         date_style="iso",
         time_style="iso-short"
     )
+    .fmt_number(cs.numeric(), decimals=5)
 )
 ```
 
@@ -177,17 +182,17 @@ Read in both concentration and uncertainty files
 #| label: load-st-louis
 
 # read in each as it
-st_louis_concentration  = pl.read_csv(here("data/Dataset-StLouis-con.csv"))
+st_louis_concentration = pl.read_csv(here("data/Dataset-StLouis-con.csv"))
 st_louis_uncertainty = pl.read_csv(here("data/Dataset-StLouis-unc.csv"))
 
 # convert the Date column to a proper date
-st_louis_concentration  = st_louis_concentration .with_columns(
+st_louis_concentration_log = st_louis_concentration .with_columns(
     pl.col("Date").str.to_datetime(r"%m/%d/%Y %H:%M"),
-    pl.all().exclude("Date").cast(pl.Decimal(scale=5))
+    cs.numeric().log1p()
 )
-st_louis_uncertainty = st_louis_uncertainty.with_columns(
+st_louis_uncertainty_log = st_louis_uncertainty.with_columns(
     pl.col("Date").str.to_datetime(r"%m/%d/%Y %H:%M"),
-    pl.all().exclude("Date").cast(pl.Decimal(scale=5))
+    cs.numeric().log1p()
 )
 ```
 
@@ -196,7 +201,9 @@ st_louis_uncertainty = st_louis_uncertainty.with_columns(
 ```{python}
 #| label: first-glimpse-st-louis-concentration
 
-st_louis_concentration.glimpse()
+st_louis_concentration_log.with_columns(
+    cs.numeric().round(5)
+).glimpse()
 ```
 
 ```{python}
@@ -205,8 +212,8 @@ st_louis_concentration.glimpse()
 
 (
     pl.concat([
-        st_louis_concentration.head(5),
-        st_louis_concentration.tail(5)
+        st_louis_concentration_log.head(5),
+        st_louis_concentration_log.tail(5)
     ])
     .style
     .fmt_datetime(
@@ -214,6 +221,7 @@ st_louis_concentration.glimpse()
         date_style="iso",
         time_style="iso-short"
     )
+    .fmt_number(cs.numeric(), decimals=5)
 )
 ```
 
