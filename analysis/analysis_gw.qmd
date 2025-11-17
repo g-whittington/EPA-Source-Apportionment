@@ -7,26 +7,20 @@ date-format: long
 
 # Set Up
 
-```{r}
+```{python}
 #| label: libraries
 #| output: false
 
-library(tidyverse)
-library(here)
-library(gt)
-```
+import polars as pl
+import polars.selectors as cs
 
-```{r}
-#| label: configure-here
-#| output: false
+import numpy as np
 
-i_am("analysis/analysis_gw.qmd")
-```
+import altair as alt
+import great_tables
 
-```{r}
-#| label: load-helper-functions
-
-source(here("analysis", "helper.R"))
+import sys
+from pyhere import here
 ```
 
 # Source Apportionment
@@ -80,36 +74,47 @@ out of the range of detection for the measurement device.
 
 Read in both concentration and uncertainty files
 
-```{r}
+```{python}
 #| label: load-baltimore
 
-baltimore_concentration <- read_csv(here("data/Dataset-Baltimore_con.csv")) |> 
-    convert_to_date()
-baltimore_uncertainty <- read_csv(here("data/Dataset-Baltimore_unc.csv")) |> 
-    convert_to_date()
+# read in each as it
+baltimore_concentration = pl.read_csv(here("data/Dataset-Baltimore_con.csv"))
+baltimore_uncertainty = pl.read_csv(here("data/Dataset-Baltimore_unc.csv"))
+
+# convert the Date column to a proper date
+baltimore_concentration = baltimore_concentration.with_columns(
+    pl.col("Date").str.to_date(r"%m/%d/%Y"),
+    pl.all().exclude("Date").cast(pl.Decimal(scale=5))
+)
+baltimore_uncertainty = baltimore_uncertainty.with_columns(
+    pl.col("Date").str.to_date(r"%m/%d/%Y"),
+    pl.all().exclude("Date").cast(pl.Decimal(scale=5))
+)
 ```
 
 ### Concentration
 
-```{r}
+```{python}
 #| label: first-glimpse-baltimore-concentration
 
-glimpse(baltimore_concentration)
+baltimore_concentration.glimpse()
 ```
 
 Here we can see the data type and a top glimpse into the value of each of the
 columns. Here can see there is one column of dates, and then the concentration
 of each of the chemical/elements give as a double. 
 
-```{r}
-#| label: tbl-head-tail
+```{python}
+#| label: tbl-head-tail-baltimore-concentration
 #| tbl-cap: First and Last 5 Rows
 
-bind_rows(
-    baltimore_concentration |> slice_head(n = 5),
-    baltimore_concentration |> slice_tail(n = 5)
-) |> 
-    gt()
+(
+    pl.concat([
+        baltimore_concentration.head(5),
+        baltimore_concentration.tail(5)
+    ])
+    .style
+)
 ```
 
 ### Uncertainty
@@ -118,21 +123,48 @@ bind_rows(
 
 Read in both concentration and uncertainty files
 
-```{r}
+```{python}
 #| label: load-baton-rouge
 
-baton_rouge_concentration <- read_csv(here("data/Dataset-BatonRouge-con.csv"))|>
-    convert_to_date()
-baton_rouge_uncertainty <- read_csv(here("data/Dataset-BatonRouge-unc.csv")) |>
-    convert_to_date()
+# read in each as it
+baton_rouge_concentration = pl.read_csv(here("data/Dataset-BatonRouge-con.csv"))
+baton_rouge_uncertainty = pl.read_csv(here("data/Dataset-BatonRouge-unc.csv"))
+
+# convert the Date column to a proper date
+baton_rouge_concentration = baton_rouge_concentration.with_columns(
+    pl.col("Date").str.to_datetime(r"%m/%d/%Y %H:%M"),
+    pl.all().exclude("Date").cast(pl.Decimal(scale=5))
+)
+baton_rouge_uncertainty = baton_rouge_uncertainty.with_columns(
+    pl.col("Date").str.to_datetime(r"%m/%d/%Y %H:%M"),
+    pl.all().exclude("Date").cast(pl.Decimal(scale=5))
+)
 ```
 
 ### Concentration
 
-```{r}
+```{python}
 #| label: first-glimpse-baton-rouge-concentration
 
-glimpse(baton_rouge_concentration)
+baton_rouge_concentration.glimpse()
+```
+
+```{python}
+#| label: tbl-head-tail-baton-rouge-concentration
+#| tbl-cap: First and Last 5 Rows
+
+(
+    pl.concat([
+        baton_rouge_concentration.head(5),
+        baton_rouge_concentration.tail(5)
+    ])
+    .style
+    .fmt_datetime(
+        columns="Date",
+        date_style="iso",
+        time_style="iso-short"
+    )
+)
 ```
 
 ### Uncertainty
@@ -141,24 +173,139 @@ glimpse(baton_rouge_concentration)
 
 Read in both concentration and uncertainty files
 
-```{r}
+```{python}
 #| label: load-st-louis
 
-st_louis_concentration <- read_csv(here("data/Dataset-StLouis-con.csv")) |>
-    convert_to_date()
-st_louis_uncertainty <- read_csv(here("data/Dataset-StLouis-unc.csv")) |>
-    convert_to_date()
+# read in each as it
+st_louis_concentration  = pl.read_csv(here("data/Dataset-StLouis-con.csv"))
+st_louis_uncertainty = pl.read_csv(here("data/Dataset-StLouis-unc.csv"))
+
+# convert the Date column to a proper date
+st_louis_concentration  = st_louis_concentration .with_columns(
+    pl.col("Date").str.to_datetime(r"%m/%d/%Y %H:%M"),
+    pl.all().exclude("Date").cast(pl.Decimal(scale=5))
+)
+st_louis_uncertainty = st_louis_uncertainty.with_columns(
+    pl.col("Date").str.to_datetime(r"%m/%d/%Y %H:%M"),
+    pl.all().exclude("Date").cast(pl.Decimal(scale=5))
+)
 ```
 
 ### Concentration
 
-```{r}
+```{python}
 #| label: first-glimpse-st-louis-concentration
 
-glimpse(st_louis_concentration)
+st_louis_concentration.glimpse()
+```
+
+```{python}
+#| label: tbl-head-tail-st-louis-concentration
+#| tbl-cap: First and Last 5 Rows
+
+(
+    pl.concat([
+        st_louis_concentration.head(5),
+        st_louis_concentration.tail(5)
+    ])
+    .style
+    .fmt_datetime(
+        columns="Date",
+        date_style="iso",
+        time_style="iso-short"
+    )
+)
 ```
 
 ### Uncertainty
+
+# Creation of Long Datasets
+
+Function for reference creating the long datasets
+
+```{python}
+#| label: function-write-long
+#| eval: false
+
+def write_long_data(
+    data_con: pl.DataFrame,
+    data_unc: pl.DataFrame,
+    file_name: str
+):
+    """
+    Convert EPA Data to Long Format with uncertainty and write to csv
+    and parquet (to optionally preserve data type information)
+
+    Parameters
+    ----------
+    data_con : pl.DataFrame
+        A DataFrame containing the concentration data
+    data_unc : pl.DataFrame
+        A DataFrame uncertainty the concentration data
+    file_name : str
+        A file name to save data as
+    """
+
+    # keep the Date column as it and move the names and values of each
+    # species to a row
+    data_con_long = data_con.unpivot(
+        on=cs.numeric(),
+        index="Date",
+        variable_name="Species",
+         value_name="Concentration"
+    )
+
+    # keep the Date column as it and move the names and values of each
+    # species to a row
+    data_unc_long = data_unc.unpivot(
+        on=cs.numeric(),
+        index="Date",
+        variable_name="Species",
+         value_name="Uncertainty"
+    )
+
+    # join them together and add uncertainty percentage
+    combined = data_con_long.join(
+        data_unc_long,
+        on=["Date", "Species"],
+    )
+
+    # St Louis has 0 values in concentration
+    combined = combined.with_columns(
+        pl.col("Concentration").replace(0, None)
+        .alias("Concentration")
+    )
+
+    combined = combined.with_columns(
+        (pl.col("Uncertainty") / pl.col("Concentration"))
+        .alias("Uncertainty_Ratio")
+    )
+
+    # write combined data to file
+    combined.write_csv(here("data/long", file_name + ".csv"))
+    combined.write_parquet(here("data/long", file_name + ".parquet"))
+```
+
+```{python}
+#| label: write-data-long
+#| eval: false
+
+write_long_data(
+    baltimore_concentration,
+    baltimore_uncertainty,
+    "baltimore_long."
+)
+write_long_data(
+    baton_rouge_concentration,
+    baton_rouge_uncertainty,
+    "baton_rouge_long"
+)
+write_long_data(
+    st_louis_concentration,
+    st_louis_uncertainty,
+    "st_louis_long"
+)
+```
 
 # Links
 
@@ -166,7 +313,8 @@ glimpse(st_louis_concentration)
 
 <a href="https://cloud.r-project.org/web/packages/pcpr/vignettes/pcp-applied.html" target="_blank" rel="noopener noreferrer">R code example doing Non-Negative Matrix Factorization</a>
 
+<a href="https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.NMF.html" target="_blank" rel="noopener noreferrer">Python code example doing Non-Negative Matrix Factorization</a>
+
 ## References
 
 <a href="https://www.nrcs.usda.gov/sites/default/files/2022-10/4-Source-Apportionment.pdf" target="_blank" rel="noopener noreferrer">Powerpoint also on elc. This is Rizzo</a>
-

@@ -1,6 +1,9 @@
 project:
   title: "Analysis"
   output-dir: docs
+  render: 
+    - "*.qmd"
+    - "!old-r/"
 
 format: 
     html:

@@ -1,0 +1,172 @@
+---
+title: "Introduction Exploratory Data Analysis"
+author: George Whittington
+date: today
+date-format: long
+---
+
+# Set Up
+
+```{r}
+#| label: libraries
+#| output: false
+
+library(tidyverse)
+library(here)
+library(gt)
+```
+
+```{r}
+#| label: configure-here
+#| output: false
+
+i_am("analysis/analysis_gw.qmd")
+```
+
+```{r}
+#| label: load-helper-functions
+
+source(here("analysis", "helper.R"))
+```
+
+# Source Apportionment
+
+Source apportionment is a "collection of techniques to provide information
+regarding how much a source (usually a generalized category) contributes to the
+overall pollutant concentration at receptor (usually a monitoring site)"
+(Rizzo, 2010).
+
+"Source apportionment is the process of statistically estimating the relative
+contributions from a set of sources to the observed sample data" (Smith, 2025).
+
+In our case, we will use source apportionment as a method of unsupervised
+learning applied to air quality data. By analyzing the chemical composition of
+each observation, we will use Non-Negative/Positive Matrix Factorization
+(NMF/PMF) to extract latent factors from the data. We can then interpret these
+factors to identify specific source profiles (the chemical makeup of the source)
+and calculate their corresponding source contributions (the amount of pollution
+from that source) over time.
+
+Statistically, this approach functions as a specialized form of Factor Analysis.
+While traditional Factor Analysis allows for negative values in its mathematical
+solution, our context requires a strict non-negativity constraint because
+physical matter (pollution) cannot exist in negative quantities. Therefore, we
+treat the unknown pollution sources as latent factors (hidden variables that
+drive the observed variance in the data) and solve for them using algorithms
+that enforce positive values.
+
+# Datasets
+
+For this project, the EPA has provided six data files:
+
+- Dataset-Baltimore_con.csv
+- Dataset-Baltimore_unc.csv
+
+- Dataset-BatonRouge-con.csv
+- Dataset-BatonRouge-unc.csv
+
+- Dataset-StLouis-con.csv
+- Dataset-StLouis-unc.csv
+
+Where the *_con files represent the readings from the detection device and the
+*_unc files represent the uncertainty of those readings, or the standard
+deviation of the readings. This comes into play where we can see how reliable
+the readings of each chemical were for that day. A flat 10% uncertainty could
+just be a baseline for that given chemical. But given an uncertainty that is
+higher than the observed value, that might indicate that the observation fell
+out of the range of detection for the measurement device. 
+
+## Baltimore
+
+Read in both concentration and uncertainty files
+
+```{r}
+#| label: load-baltimore
+
+baltimore_concentration <- read_csv(here("data/Dataset-Baltimore_con.csv")) |> 
+    convert_to_date()
+baltimore_uncertainty <- read_csv(here("data/Dataset-Baltimore_unc.csv")) |> 
+    convert_to_date()
+```
+
+### Concentration
+
+```{r}
+#| label: first-glimpse-baltimore-concentration
+
+glimpse(baltimore_concentration)
+```
+
+Here we can see the data type and a top glimpse into the value of each of the
+columns. Here can see there is one column of dates, and then the concentration
+of each of the chemical/elements give as a double. 
+
+```{r}
+#| label: tbl-head-tail
+#| tbl-cap: First and Last 5 Rows
+
+bind_rows(
+    baltimore_concentration |> slice_head(n = 5),
+    baltimore_concentration |> slice_tail(n = 5)
+) |> 
+    gt()
+```
+
+### Uncertainty
+
+## BatonRouge
+
+Read in both concentration and uncertainty files
+
+```{r}
+#| label: load-baton-rouge
+
+baton_rouge_concentration <- read_csv(here("data/Dataset-BatonRouge-con.csv"))|>
+    convert_to_date()
+baton_rouge_uncertainty <- read_csv(here("data/Dataset-BatonRouge-unc.csv")) |>
+    convert_to_date()
+```
+
+### Concentration
+
+```{r}
+#| label: first-glimpse-baton-rouge-concentration
+
+glimpse(baton_rouge_concentration)
+```
+
+### Uncertainty
+
+## StLouis
+
+Read in both concentration and uncertainty files
+
+```{r}
+#| label: load-st-louis
+
+st_louis_concentration <- read_csv(here("data/Dataset-StLouis-con.csv")) |>
+    convert_to_date()
+st_louis_uncertainty <- read_csv(here("data/Dataset-StLouis-unc.csv")) |>
+    convert_to_date()
+```
+
+### Concentration
+
+```{r}
+#| label: first-glimpse-st-louis-concentration
+
+glimpse(st_louis_concentration)
+```
+
+### Uncertainty
+
+# Links
+
+## Useful Reference for modeling later
+
+<a href="https://cloud.r-project.org/web/packages/pcpr/vignettes/pcp-applied.html" target="_blank" rel="noopener noreferrer">R code example doing Non-Negative Matrix Factorization</a>
+
+## References
+
+<a href="https://www.nrcs.usda.gov/sites/default/files/2022-10/4-Source-Apportionment.pdf" target="_blank" rel="noopener noreferrer">Powerpoint also on elc. This is Rizzo</a>
+
