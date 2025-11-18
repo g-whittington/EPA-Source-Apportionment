@@ -1,0 +1,356 @@
+---
+title: "First Look At Data"
+author: George Whittington
+date: today
+date-format: long
+---
+
+# Set Up
+
+```{python}
+#| label: libraries
+#| output: false
+
+import polars as pl
+import polars.selectors as cs
+
+import numpy as np
+
+import altair as alt
+import great_tables
+
+from pyhere import here
+```
+
+# Datasets
+
+For this project, the EPA has provided six data files:
+
+- Dataset-Baltimore_con.csv
+- Dataset-Baltimore_unc.csv
+
+- Dataset-BatonRouge-con.csv
+- Dataset-BatonRouge-unc.csv
+
+- Dataset-StLouis-con.csv
+- Dataset-StLouis-unc.csv
+
+Where the *_con files represent the readings from the detection device and the
+*_unc files represent the uncertainty of those readings, or the standard
+deviation of the readings. This comes into play where we can see how reliable
+the readings of each chemical were for that day. A flat 10% uncertainty could
+just be a baseline for that given chemical. But given an uncertainty that is
+higher than the observed value, that might indicate that the observation fell
+out of the range of detection for the measurement device. 
+
+## Baltimore
+
+Read in both concentration and uncertainty files
+
+```{python}
+#| label: load-baltimore
+
+# read in each as it
+baltimore_concentration = pl.read_csv(here("data/Dataset-Baltimore_con.csv"))
+baltimore_uncertainty = pl.read_csv(here("data/Dataset-Baltimore_unc.csv"))
+
+# convert the Date column to a proper date
+baltimore_concentration_log = baltimore_concentration.with_columns(
+    pl.col("Date").str.to_date(r"%m/%d/%Y"),
+    cs.numeric().log1p()
+)
+baltimore_uncertainty_log = baltimore_uncertainty.with_columns(
+    pl.col("Date").str.to_date(r"%m/%d/%Y"),
+    cs.numeric().log1p()
+)
+```
+
+```{python}
+#| label: fix-labels-baltimore
+
+baltimore_concentration_log.columns = [
+    col.lower().replace(' ', '_') 
+    for col in baltimore_concentration_log.columns
+]
+
+baltimore_uncertainty_log.columns = [
+    col.lower().replace(' ', '_') 
+    for col in baltimore_uncertainty_log.columns
+]
+```
+
+### Concentration
+
+```{python}
+#| label: first-glimpse-baltimore-concentration
+
+baltimore_concentration_log.with_columns(
+    cs.numeric().round(5)
+).glimpse()
+```
+
+```{python}
+#| label: tbl-head-tail-baltimore-concentration
+#| tbl-cap: First and Last 5 Rows
+
+(
+    pl.concat([
+        baltimore_concentration_log.head(5),
+        baltimore_concentration_log.tail(5)
+    ])
+    .style
+    .fmt_number(cs.numeric(), decimals=5)
+)
+```
+
+## BatonRouge
+
+Read in both concentration and uncertainty files
+
+```{python}
+#| label: load-baton-rouge
+
+# read in each as it
+baton_rouge_concentration = pl.read_csv(here("data/Dataset-BatonRouge-con.csv"))
+baton_rouge_uncertainty = pl.read_csv(here("data/Dataset-BatonRouge-unc.csv"))
+
+# convert the Date column to a proper date
+baton_rouge_concentration_log = baton_rouge_concentration.with_columns(
+    pl.col("Date").str.to_datetime(r"%m/%d/%Y %H:%M"),
+    cs.numeric().log1p()
+)
+baton_rouge_uncertainty_log = baton_rouge_uncertainty.with_columns(
+    pl.col("Date").str.to_datetime(r"%m/%d/%Y %H:%M"),
+    cs.numeric().log1p()
+)
+```
+
+```{python}
+#| label: fix-labels-baton-rouge
+
+baton_rouge_concentration_log.columns = [
+    col.lower().replace(' ', '_') 
+    for col in baton_rouge_concentration_log.columns
+]
+
+baton_rouge_uncertainty_log.columns = [
+    col.lower().replace(' ', '_') 
+    for col in baton_rouge_uncertainty_log.columns
+]
+```
+
+### Concentration
+
+```{python}
+#| label: first-glimpse-baton-rouge-concentration
+
+baton_rouge_concentration_log.with_columns(
+    cs.numeric().round(5)
+).glimpse()
+```
+
+```{python}
+#| label: tbl-head-tail-baton-rouge-concentration
+#| tbl-cap: First and Last 5 Rows
+
+(
+    pl.concat([
+        baton_rouge_concentration_log.head(5),
+        baton_rouge_concentration_log.tail(5)
+    ])
+    .style
+    .fmt_datetime(
+        columns="date",
+        date_style="iso",
+        time_style="iso-short"
+    )
+    .fmt_number(cs.numeric(), decimals=5)
+)
+```
+
+## StLouis
+
+Read in both concentration and uncertainty files
+
+```{python}
+#| label: load-st-louis
+
+# read in each as it
+st_louis_concentration = pl.read_csv(here("data/Dataset-StLouis-con.csv"))
+st_louis_uncertainty = pl.read_csv(here("data/Dataset-StLouis-unc.csv"))
+
+# convert the Date column to a proper date
+st_louis_concentration_log = st_louis_concentration .with_columns(
+    pl.col("Date").str.to_datetime(r"%m/%d/%Y %H:%M"),
+    cs.numeric().log1p()
+)
+st_louis_uncertainty_log = st_louis_uncertainty.with_columns(
+    pl.col("Date").str.to_datetime(r"%m/%d/%Y %H:%M"),
+    cs.numeric().log1p()
+)
+```
+
+```{python}
+#| label: fix-labels-st-louis
+
+# based on chemical symbol and previous columns
+col_name_map = {
+    "Date":"date",
+    "Cd":"cadmium",
+    "Cu":"copper",
+    "Fe":"iron",
+    "Mn":"manganese",
+    "Ni":"nickel",
+    "Pb":"lead",
+    "Se":"selenium",
+    "Zn":"zinc",
+    "SO4":"sulfate",
+    "NO3":"total_nitrate",
+    "OC":"organic_carbon",
+    "EC":"elemental_carbon",
+    "Mass":"pm2.5"
+}
+
+st_louis_concentration_log = st_louis_concentration_log.rename(col_name_map)
+st_louis_uncertainty_log = st_louis_uncertainty_log.rename(col_name_map)
+```
+
+### Concentration
+
+```{python}
+#| label: first-glimpse-st-louis-concentration
+
+st_louis_concentration_log.with_columns(
+    cs.numeric().round(5)
+).glimpse()
+```
+
+```{python}
+#| label: tbl-head-tail-st-louis-concentration
+#| tbl-cap: First and Last 5 Rows
+
+(
+    pl.concat([
+        st_louis_concentration_log.head(5),
+        st_louis_concentration_log.tail(5)
+    ])
+    .style
+    .fmt_datetime(
+        columns="date",
+        date_style="iso",
+        time_style="iso-short"
+    )
+    .fmt_number(cs.numeric(), decimals=5)
+)
+```
+
+# Creation of Long Datasets
+
+Function for reference creating the long datasets
+
+```{python}
+#| label: function-write-long
+#| eval: false
+
+def write_long_data(
+    data_con: pl.DataFrame,
+    data_unc: pl.DataFrame,
+    file_name: str
+):
+    """
+    Convert EPA Data to Long Format with uncertainty and write to csv
+    and parquet (to optionally preserve data type information)
+
+    Parameters
+    ----------
+    data_con : pl.DataFrame
+        A DataFrame containing the concentration data
+    data_unc : pl.DataFrame
+        A DataFrame uncertainty the concentration data
+    file_name : str
+        A file name to save data as
+    """
+
+    # keep the Date column as it and move the names and values of each
+    # species to a row
+    data_con_long = data_con.unpivot(
+        on=cs.numeric(),
+        index="date",
+        variable_name="species",
+         value_name="concentration"
+    )
+
+    # keep the Date column as it and move the names and values of each
+    # species to a row
+    data_unc_long = data_unc.unpivot(
+        on=cs.numeric(),
+        index="date",
+        variable_name="species",
+         value_name="uncertainty"
+    )
+
+    # join them together and add uncertainty percentage
+    combined = data_con_long.join(
+        data_unc_long,
+        on=["date", "species"],
+    )
+
+    # St Louis has 0 values in concentration
+    combined = combined.with_columns(
+        pl.when(pl.col("concentration") != 0)
+        .then(pl.col("uncertainty") / pl.col("concentration"))
+        .otherwise(None)
+        .alias("uncertainty_ratio")
+    )
+
+    # write combined data to file
+    combined.write_csv(here("data/long", file_name + ".csv"))
+    combined.write_parquet(here("data/long", file_name + ".parquet"))
+```
+
+```{python}
+#| label: write-data-long
+#| eval: false
+
+write_long_data(
+    baltimore_concentration_log,
+    baltimore_uncertainty_log,
+    "baltimore_long"
+)
+write_long_data(
+    baton_rouge_concentration_log,
+    baton_rouge_uncertainty_log,
+    "baton_rouge_long"
+)
+write_long_data(
+    st_louis_concentration_log,
+    st_louis_uncertainty_log,
+    "st_louis_long"
+)
+```
+
+```{python}
+#| label: write-wide-data
+#| eval: false
+
+baltimore_concentration_log.write_csv(
+    here("data/wide/baltimore_concentration.csv")
+)
+baltimore_uncertainty_log.write_parquet(
+    here("data/wide/baltimore_uncertainty.parquet")
+)
+
+baton_rouge_concentration_log.write_csv(
+    here("data/wide/baton_rouge_concentration.csv")
+)
+baton_rouge_uncertainty_log.write_parquet(
+    here("data/wide/baton_rouge_uncertainty.parquet")
+)
+
+st_louis_concentration_log.write_csv(
+    here("data/wide/st_louis_concentration.csv")
+)
+st_louis_uncertainty_log.write_parquet(
+    here("data/wide/st_louis_uncertainty.parquet")
+)
+```
