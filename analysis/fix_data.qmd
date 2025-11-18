@@ -300,12 +300,18 @@ def write_long_data(
         pl.when(pl.col("concentration") != 0)
         .then(pl.col("uncertainty") / pl.col("concentration"))
         .otherwise(None)
-        .alias("uncertainty_ratio")
+        .alias("uncertainty_ratio"),
     )
 
+    combined = combined.with_columns(cs.numeric().round(6))
+
     # write combined data to file
-    combined.write_csv(here("data/long", file_name + ".csv"))
-    combined.write_parquet(here("data/long", file_name + ".parquet"))
+    combined.write_csv(
+        here("data/long", file_name + ".csv"),
+    )
+    combined.write_parquet(
+        here("data/long", file_name + ".parquet"),
+    )
 ```
 
 ```{python}
@@ -333,24 +339,36 @@ write_long_data(
 #| label: write-wide-data
 #| eval: false
 
-baltimore_concentration_log.write_csv(
+baltimore_concentration_log.with_columns(
+    cs.numeric().round(6)
+).write_csv(
     here("data/wide/baltimore_concentration.csv")
 )
-baltimore_uncertainty_log.write_parquet(
+baltimore_uncertainty_log.with_columns(
+    cs.numeric().round(6)
+).write_parquet(
     here("data/wide/baltimore_uncertainty.parquet")
 )
 
-baton_rouge_concentration_log.write_csv(
+baton_rouge_concentration_log.with_columns(
+    cs.numeric().round(6)
+).write_csv(
     here("data/wide/baton_rouge_concentration.csv")
 )
-baton_rouge_uncertainty_log.write_parquet(
+baton_rouge_uncertainty_log.with_columns(
+    cs.numeric().round(6)
+).write_parquet(
     here("data/wide/baton_rouge_uncertainty.parquet")
 )
 
-st_louis_concentration_log.write_csv(
+st_louis_concentration_log.with_columns(
+    cs.numeric().round(6)
+).write_csv(
     here("data/wide/st_louis_concentration.csv")
 )
-st_louis_uncertainty_log.write_parquet(
+st_louis_uncertainty_log.with_columns(
+    cs.numeric().round(6)
+).write_parquet(
     here("data/wide/st_louis_uncertainty.parquet")
 )
 ```
