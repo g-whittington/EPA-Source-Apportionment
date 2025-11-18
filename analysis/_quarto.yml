@@ -1,9 +1,17 @@
 project:
-  title: "Analysis"
+  type: website
   output-dir: docs
   render: 
     - "*.qmd"
     - "!old-r/"
+
+website:
+  title: "Analysis"
+  navbar: 
+    left:
+      - fix_data.qmd
+      - analysis.qmd
+
 
 format: 
     html:

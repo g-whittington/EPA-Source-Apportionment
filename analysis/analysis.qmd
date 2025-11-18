@@ -1,0 +1,59 @@
+---
+title: "Exploratory Data Analysis"
+author: George Whittington
+date: today
+date-format: long
+---
+
+```{python}
+#| label: libraries
+#| output: false
+
+import polars as pl
+import polars.selectors as cs
+
+import numpy as np
+
+import altair as alt
+import great_tables
+
+from pyhere import here
+```
+
+# Source Apportionment
+
+Source apportionment is a "collection of techniques to provide information
+regarding how much a source (usually a generalized category) contributes to the
+overall pollutant concentration at receptor (usually a monitoring site)"
+(Rizzo, 2010).
+
+"Source apportionment is the process of statistically estimating the relative
+contributions from a set of sources to the observed sample data" (Smith, 2025).
+
+In our case, we will use source apportionment as a method of unsupervised
+learning applied to air quality data. By analyzing the chemical composition of
+each observation, we will use Non-Negative/Positive Matrix Factorization
+(NMF/PMF) to extract latent factors from the data. We can then interpret these
+factors to identify specific source profiles (the chemical makeup of the source)
+and calculate their corresponding source contributions (the amount of pollution
+from that source) over time.
+
+Statistically, this approach functions as a specialized form of Factor Analysis.
+While traditional Factor Analysis allows for negative values in its mathematical
+solution, our context requires a strict non-negativity constraint because
+physical matter (pollution) cannot exist in negative quantities. Therefore, we
+treat the unknown pollution sources as latent factors (hidden variables that
+drive the observed variance in the data) and solve for them using algorithms
+that enforce positive values.
+
+# Links
+
+## Useful Reference for modeling later
+
+<a href="https://cloud.r-project.org/web/packages/pcpr/vignettes/pcp-applied.html" target="_blank" rel="noopener noreferrer">R code example doing Non-Negative Matrix Factorization</a>
+
+<a href="https://scikit-learn.org/stable/modules/generated/sklearn.decomposition.NMF.html" target="_blank" rel="noopener noreferrer">Python code example doing Non-Negative Matrix Factorization</a>
+
+## References
+
+<a href="https://www.nrcs.usda.gov/sites/default/files/2022-10/4-Source-Apportionment.pdf" target="_blank" rel="noopener noreferrer">Powerpoint also on elc. This is Rizzo</a>
