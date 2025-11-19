@@ -6,7 +6,7 @@ UGA Statistics client capstone project to perform source apportionment on air qu
 
 - Deeya Datta
 
-- Pratik Mishra
+- Prateek Mishra
 
 - George Whittington
 
