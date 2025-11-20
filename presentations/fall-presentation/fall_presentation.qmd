@@ -9,9 +9,38 @@ author:
 
 # Introduction & Background
 
-## Client
+##  Deron Smith - Background
 
-Stuff about client
+::: {.column}
+- He received his B.S. in Physics from UGA in 2015 
+
+- Worked a little and then got his M.S. in Computer Science from Ga Tech in 2021
+
+- He currently does research and software development for the Environmental Protection Agency
+:::
+
+::: {.column}
+![Deron Smith](img/deron_head.jpg)
+:::
+
+## Deron Smith - Recent projects
+
+::: {.column}
+- Environmental Source Apportionment Toolkit (ESAT): A open source tool that is 
+the succession of a  tool the EPA had previously made for modeling source 
+apportionment data
+
+- ESAT GUI Application: A cross platform graphical user interface for the above
+toolkit
+:::
+
+::: {.column}
+![](img/esat-logo.png)
+:::
+
+::: footer
+More on the [toolkit](https://github.com/quanted/esat)
+:::
 
 ## Source Apportionment
 

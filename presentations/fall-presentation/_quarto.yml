@@ -6,4 +6,4 @@ project:
 format: 
   revealjs:
     slide-number: true
-    theme: dracula
+    theme: solarized
