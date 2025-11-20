@@ -309,9 +309,6 @@ def write_long_data(
     combined.write_csv(
         here("data/long", file_name + ".csv"),
     )
-    combined.write_parquet(
-        here("data/long", file_name + ".parquet"),
-    )
 ```
 
 ```{python}
@@ -346,8 +343,8 @@ baltimore_concentration_log.with_columns(
 )
 baltimore_uncertainty_log.with_columns(
     cs.numeric().round(6)
-).write_parquet(
-    here("data/wide/baltimore_uncertainty.parquet")
+).write_csv(
+    here("data/wide/baltimore_uncertainty.csv")
 )
 
 baton_rouge_concentration_log.with_columns(
@@ -357,8 +354,8 @@ baton_rouge_concentration_log.with_columns(
 )
 baton_rouge_uncertainty_log.with_columns(
     cs.numeric().round(6)
-).write_parquet(
-    here("data/wide/baton_rouge_uncertainty.parquet")
+).write_csv(
+    here("data/wide/baton_rouge_uncertainty.csv")
 )
 
 st_louis_concentration_log.with_columns(
@@ -368,7 +365,7 @@ st_louis_concentration_log.with_columns(
 )
 st_louis_uncertainty_log.with_columns(
     cs.numeric().round(6)
-).write_parquet(
-    here("data/wide/st_louis_uncertainty.parquet")
+).write_csv(
+    here("data/wide/st_louis_uncertainty.csv")
 )
 ```
