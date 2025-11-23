@@ -316,6 +316,29 @@ axs[1].set_xlabel("Particulate Matter 2.5")
 axs[1].set_title("log(x + 1)");
 ```
 
+# Used in Presentation
+
+```{python}
+#| label: tbl-species-baltimore
+#| tbl-cap: Baltimore Chemical Species
+
+baltimore_lon["species"].unique()
+```
+
+```{python}
+#| label: tbl-species-baton-rouge
+#| tbl-cap: Baton Rouge Chemical Species
+
+ 
+```
+
+```{python}
+#| label: tbl-species-st-louis
+#| tbl-cap: St. Louis Chemical Species
+
+ 
+```
+
 # Links
 
 ## Useful Reference for modeling later
