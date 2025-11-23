@@ -14,10 +14,13 @@ import polars.selectors as cs
 
 import numpy as np
 
-import altair as alt
+import matplotlib.pyplot as plt
+import seaborn as sns
 import great_tables
 
 from pyhere import here
+
+plt.style.use("ggplot")
 ```
 
 # Source Apportionment
@@ -45,6 +48,273 @@ physical matter (pollution) cannot exist in negative quantities. Therefore, we
 treat the unknown pollution sources as latent factors (hidden variables that
 drive the observed variance in the data) and solve for them using algorithms
 that enforce positive values.
+
+# Data
+
+```{python}
+#| label: load-data
+
+# baltimore unclean
+baltimore_con_old = pl.read_csv(here("data/Dataset-Baltimore_con.csv"))
+baltimore_unc_old = pl.read_csv(here("data/Dataset-Baltimore_unc.csv"))
+
+# baltimore clean
+baltimore_con = pl.read_csv(here("data/wide/baltimore_concentration.csv"))
+baltimore_unc = pl.read_csv(here("data/wide/baltimore_uncertainty.csv"))
+baltimore_lon = pl.read_csv(here("data/long/baltimore_long.csv"))
+
+# baton rouge unclean
+baton_rouge_con_old = pl.read_csv(here("data/Dataset-BatonRouge-con.csv"))
+baton_rouge_unc_old = pl.read_csv(here("data/Dataset-BatonRouge-unc.csv"))
+
+# baton rouge clean
+baton_rouge_con = pl.read_csv(here("data/wide/baton_rouge_concentration.csv"))
+baton_rouge_unc = pl.read_csv(here("data/wide/baton_rouge_uncertainty.csv"))
+baton_rouge_lon = pl.read_csv(here("data/long/baton_rouge_long.csv"))
+
+# st louis unclean 
+st_louis_con_old = pl.read_csv(here("data/Dataset-StLouis-con.csv"))
+st_louis_unc_old = pl.read_csv(here("data/Dataset-StLouis-unc.csv"))
+
+# st louis clean
+st_louis_con = pl.read_csv(here("data/wide/st_louis_concentration.csv"))
+st_louis_unc = pl.read_csv(here("data/wide/st_louis_uncertainty.csv"))
+st_louis_lon = pl.read_csv(here("data/long/st_louis_long.csv"))
+```
+
+## Head of All the Data
+
+```{python}
+#| label: tbl-head-baltimore-con-old
+#| tbl-cap: Baltimore Concentration Old
+#| echo: false
+
+(
+    baltimore_con_old
+    .head()
+    .style
+)
+```
+
+```{python}
+#| label: tbl-head-baltimore-unc-old
+#| tbl-cap: Baltimore Uncertainty Old
+#| echo: false
+
+(
+    baltimore_unc_old
+    .head()
+    .style
+)
+```
+
+```{python}
+#| label: tbl-head-baltimore-con
+#| tbl-cap: Baltimore Concentration
+#| echo: false
+
+(
+    baltimore_con
+    .head()
+    .style
+)
+```
+
+```{python}
+#| label: tbl-head-baltimore-unc
+#| tbl-cap: Baltimore Uncertainty
+#| echo: false
+
+(
+    baltimore_unc
+    .head()
+    .style
+)
+```
+
+```{python}
+#| label: tbl-head-baltimore-lon
+#| tbl-cap: Baltimore Combined
+#| echo: false
+
+(
+    baltimore_lon
+    .head()
+    .style
+)
+```
+
+```{python}
+#| label: tbl-head-baton-rouge-con-old
+#| tbl-cap: Baton Rouge Concentration Old
+#| echo: false
+
+(
+    baton_rouge_con_old
+    .head()
+    .style
+)
+```
+
+```{python}
+#| label: tbl-head-baton-rouge-unc-old
+#| tbl-cap: Baton Rouge Uncertainty Old
+#| echo: false
+
+(
+    baton_rouge_unc_old
+    .head()
+    .style
+)
+```
+
+```{python}
+#| label: tbl-head-baton-rouge-con
+#| tbl-cap: Baton Rouge Concentration
+#| echo: false
+
+(
+    baton_rouge_con
+    .head()
+    .style
+)
+```
+
+```{python}
+#| label: tbl-head-baton-rouge-unc
+#| tbl-cap: Baton Rouge Uncertainty
+#| echo: false
+
+(
+    baton_rouge_unc
+    .head()
+    .style
+)
+```
+
+```{python}
+#| label: tbl-head-baton-rouge-lon
+#| tbl-cap: Baton Rouge Combined
+#| echo: false
+
+(
+    baton_rouge_lon
+    .head()
+    .style
+)
+```
+
+```{python}
+#| label: tbl-head-st-louis-con-old
+#| tbl-cap: St Louis Concentration Old
+#| echo: false
+
+(
+    st_louis_con_old
+    .head()
+    .style
+)
+```
+
+```{python}
+#| label: tbl-head-st-louis-unc-old
+#| tbl-cap: St Louis Uncertainty Old
+#| echo: false
+
+(
+    st_louis_unc_old
+    .head()
+    .style
+)
+```
+
+```{python}
+#| label: tbl-head-st-louis-con
+#| tbl-cap: St Louis Concentration
+#| echo: false
+
+(
+    st_louis_con
+    .head()
+    .style
+)
+```
+
+```{python}
+#| label: tbl-head-st-louis-unc
+#| tbl-cap: St Louis Uncertainty
+#| echo: false
+
+(
+    st_louis_unc
+    .head()
+    .style
+)
+
+```
+
+```{python}
+#| label: tbl-head-st-louis-lon
+#| tbl-cap: St Louis Combined
+#| echo: false
+
+(
+    st_louis_lon
+    .head()
+    .style
+)
+```
+
+# Baltimore
+
+```{python}
+#| label: fig-baltimore-why-log
+#| fig-cap: Distribution
+
+fig, axs = plt.subplots(1, 2)
+
+sns.histplot(x="PM2.5", data=baltimore_con_old, ax=axs[0])
+axs[0].set_xlabel("Particulate Matter 2.5")
+axs[0].set_title("Raw Data")
+
+sns.histplot(x="pm2.5", data=baltimore_con, ax=axs[1])
+axs[1].set_xlabel("Particulate Matter 2.5")
+axs[1].set_title("log(x + 1)");
+```
+
+# Baton Rouge
+
+```{python}
+#| label: fig-baton-rouge-why-log
+#| fig-cap: Distribution
+
+fig, axs = plt.subplots(1, 2)
+
+sns.histplot(x="Unidentified", data=baton_rouge_con_old, ax=axs[0])
+axs[0].set_xlabel("Unidentified")
+axs[0].set_title("Raw Data")
+
+sns.histplot(x="unidentified", data=baton_rouge_con, ax=axs[1])
+axs[1].set_xlabel("Unidentified")
+axs[1].set_title("log(x + 1)");
+```
+
+# St. Louis
+
+```{python}
+#| label: fig-st-louis--why-log
+#| fig-cap: Distribution
+
+fig, axs = plt.subplots(1, 2)
+
+sns.histplot(x="Mass", data=st_louis_con_old, ax=axs[0])
+axs[0].set_xlabel("Particulate Matter 2.5")
+axs[0].set_title("Raw Data")
+
+sns.histplot(x="pm2.5", data=st_louis_con, ax=axs[1])
+axs[1].set_xlabel("Particulate Matter 2.5")
+axs[1].set_title("log(x + 1)");
+```
 
 # Links
 

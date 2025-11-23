@@ -14,11 +14,6 @@ date-format: long
 import polars as pl
 import polars.selectors as cs
 
-import numpy as np
-
-import altair as alt
-import great_tables
-
 from pyhere import here
 ```
 
