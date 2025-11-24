@@ -20,7 +20,9 @@ import great_tables
 
 from pyhere import here
 
-plt.style.use("ggplot")
+#plt.style.use("ggplot")
+sns.set_style("darkgrid", {"axes.facecolor": ".9"})
+sns.color_palette("crest", as_cmap=True);
 ```
 
 # Source Apportionment
@@ -279,7 +281,60 @@ axs[0].set_title("Raw Data")
 
 sns.histplot(x="pm2.5", data=baltimore_con, ax=axs[1])
 axs[1].set_xlabel("Particulate Matter 2.5")
-axs[1].set_title("log(x + 1)");
+axs[1].set_title("log(x + 1)")
+
+fig.suptitle("Baltimore PM2.5: Raw vs Transformed");
+```
+
+```{python}
+#| label: tbl-baltimore-extreme-values
+
+(
+    baltimore_con_old
+    .unpivot(index="Date", variable_name="Species", value_name="Concentration")
+    .group_by("Species")
+    .agg(
+        pl.col("Concentration").mean().alias("mean"),
+        pl.col("Concentration").max().alias("max")
+    )
+    .sort("max", descending=True)
+    .head()
+    .with_columns(
+        (pl.col("max") / pl.col("mean")).alias("max_mean_ratio")
+    )
+    .style
+    .fmt_number(cs.numeric(), decimals=2)
+)
+```
+
+```{python}
+#| label: fig-baltimore-heat-map
+
+fig, ax = plt.subplots()
+
+corr_matrix = (
+    baltimore_con
+    .select(
+        "ammonium_ion",
+        "sulfate",
+        "organic_carbon",
+        "om",
+        "pm2.5"
+    )
+    .to_pandas()
+    .corr(numeric_only=True)
+    .transpose()
+)
+
+sns.heatmap(
+    corr_matrix,
+    annot=True,
+    cmap=sns.cubehelix_palette(start=2, rot=0, dark=.12, light=.95, as_cmap=True),
+    ax=ax
+)
+
+ax.set_title("Baltimore: Top 5 PM Components Correlation")
+ax.invert_yaxis()
 ```
 
 # Baton Rouge
@@ -299,6 +354,27 @@ axs[1].set_xlabel("Unidentified")
 axs[1].set_title("log(x + 1)");
 ```
 
+```{python}
+#| label: tbl-baton-rouge-extreme-values
+
+(
+    baton_rouge_con_old
+    .unpivot(index="Date", variable_name="Species", value_name="concentration")
+    .group_by("Species")
+    .agg(
+        pl.col("concentration").mean().alias("mean"),
+        pl.col("concentration").max().alias("max")
+    )
+    .sort("max", descending=True)
+    .head()
+    .with_columns(
+        (pl.col("max") / pl.col("mean")).alias("max_mean_ratio")
+    )
+    .style
+    .fmt_number(cs.numeric(), decimals=2)
+)
+```
+
 # St. Louis
 
 ```{python}
@@ -316,13 +392,48 @@ axs[1].set_xlabel("Particulate Matter 2.5")
 axs[1].set_title("log(x + 1)");
 ```
 
+```{python}
+#| label: tbl-st-louis-extreme-values
+
+(
+    st_louis_con_old
+    .unpivot(index="Date", variable_name="Species", value_name="concentration")
+    .group_by("Species")
+    .agg(
+        pl.col("concentration").mean().alias("mean"),
+        pl.col("concentration").max().alias("max")
+    )
+    .sort("max", descending=True)
+    .head()
+    .with_columns(
+        (pl.col("max") / pl.col("mean")).alias("max_mean_ratio")
+    )
+    .style
+    .fmt_number(cs.numeric(), decimals=2)
+)
+```
+
 # Used in Presentation
 
 ```{python}
-#| label: tbl-species-baltimore
-#| tbl-cap: Baltimore Chemical Species
+#| label: fig-pairwise-baltimore
+#| tbl-cap: Baltimore Pairwise Plot
 
-baltimore_lon["species"].unique()
+sns.pairplot(
+    baltimore_con
+    .select(
+        "ammonium_ion",
+        "sulfate",
+        "organic_carbon",
+        "om",
+        "pm2.5"
+    )
+    .to_pandas(),
+)
+
+plt.title("Pairwise Plots of Most Correlated Species")
+
+
 ```
 
 ```{python}
