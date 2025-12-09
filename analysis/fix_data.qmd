@@ -50,27 +50,25 @@ baltimore_concentration = pl.read_csv(here("data/Dataset-Baltimore_con.csv"))
 baltimore_uncertainty = pl.read_csv(here("data/Dataset-Baltimore_unc.csv"))
 
 # convert the Date column to a proper date
-baltimore_concentration_log = baltimore_concentration.with_columns(
+baltimore_concentration = baltimore_concentration.with_columns(
     pl.col("Date").str.to_date(r"%m/%d/%Y"),
-    cs.numeric().log1p()
 )
-baltimore_uncertainty_log = baltimore_uncertainty.with_columns(
+baltimore_uncertainty = baltimore_uncertainty.with_columns(
     pl.col("Date").str.to_date(r"%m/%d/%Y"),
-    cs.numeric().log1p()
 )
 ```
 
 ```{python}
 #| label: fix-labels-baltimore
 
-baltimore_concentration_log.columns = [
+baltimore_concentration.columns = [
     col.lower().replace(' ', '_') 
-    for col in baltimore_concentration_log.columns
+    for col in baltimore_concentration.columns
 ]
 
-baltimore_uncertainty_log.columns = [
+baltimore_uncertainty.columns = [
     col.lower().replace(' ', '_') 
-    for col in baltimore_uncertainty_log.columns
+    for col in baltimore_uncertainty.columns
 ]
 ```
 
@@ -79,7 +77,7 @@ baltimore_uncertainty_log.columns = [
 ```{python}
 #| label: first-glimpse-baltimore-concentration
 
-baltimore_concentration_log.with_columns(
+baltimore_concentration.with_columns(
     cs.numeric().round(5)
 ).glimpse()
 ```
@@ -90,8 +88,8 @@ baltimore_concentration_log.with_columns(
 
 (
     pl.concat([
-        baltimore_concentration_log.head(5),
-        baltimore_concentration_log.tail(5)
+        baltimore_concentration.head(5),
+        baltimore_concentration.tail(5)
     ])
     .style
     .fmt_number(cs.numeric(), decimals=5)
@@ -110,27 +108,25 @@ baton_rouge_concentration = pl.read_csv(here("data/Dataset-BatonRouge-con.csv"))
 baton_rouge_uncertainty = pl.read_csv(here("data/Dataset-BatonRouge-unc.csv"))
 
 # convert the Date column to a proper date
-baton_rouge_concentration_log = baton_rouge_concentration.with_columns(
+baton_rouge_concentration = baton_rouge_concentration.with_columns(
     pl.col("Date").str.to_datetime(r"%m/%d/%Y %H:%M"),
-    cs.numeric().log1p()
 )
-baton_rouge_uncertainty_log = baton_rouge_uncertainty.with_columns(
+baton_rouge_uncertainty = baton_rouge_uncertainty.with_columns(
     pl.col("Date").str.to_datetime(r"%m/%d/%Y %H:%M"),
-    cs.numeric().log1p()
 )
 ```
 
 ```{python}
 #| label: fix-labels-baton-rouge
 
-baton_rouge_concentration_log.columns = [
+baton_rouge_concentration.columns = [
     col.lower().replace(' ', '_') 
-    for col in baton_rouge_concentration_log.columns
+    for col in baton_rouge_concentration.columns
 ]
 
-baton_rouge_uncertainty_log.columns = [
+baton_rouge_uncertainty.columns = [
     col.lower().replace(' ', '_') 
-    for col in baton_rouge_uncertainty_log.columns
+    for col in baton_rouge_uncertainty.columns
 ]
 ```
 
@@ -139,7 +135,7 @@ baton_rouge_uncertainty_log.columns = [
 ```{python}
 #| label: first-glimpse-baton-rouge-concentration
 
-baton_rouge_concentration_log.with_columns(
+baton_rouge_concentration.with_columns(
     cs.numeric().round(5)
 ).glimpse()
 ```
@@ -150,8 +146,8 @@ baton_rouge_concentration_log.with_columns(
 
 (
     pl.concat([
-        baton_rouge_concentration_log.head(5),
-        baton_rouge_concentration_log.tail(5)
+        baton_rouge_concentration.head(5),
+        baton_rouge_concentration.tail(5)
     ])
     .style
     .fmt_datetime(
@@ -175,13 +171,11 @@ st_louis_concentration = pl.read_csv(here("data/Dataset-StLouis-con.csv"))
 st_louis_uncertainty = pl.read_csv(here("data/Dataset-StLouis-unc.csv"))
 
 # convert the Date column to a proper date
-st_louis_concentration_log = st_louis_concentration .with_columns(
+st_louis_concentration = st_louis_concentration .with_columns(
     pl.col("Date").str.to_datetime(r"%m/%d/%Y %H:%M"),
-    cs.numeric().log1p()
 )
-st_louis_uncertainty_log = st_louis_uncertainty.with_columns(
+st_louis_uncertainty = st_louis_uncertainty.with_columns(
     pl.col("Date").str.to_datetime(r"%m/%d/%Y %H:%M"),
-    cs.numeric().log1p()
 )
 ```
 
@@ -206,8 +200,8 @@ col_name_map = {
     "Mass":"pm2.5"
 }
 
-st_louis_concentration_log = st_louis_concentration_log.rename(col_name_map)
-st_louis_uncertainty_log = st_louis_uncertainty_log.rename(col_name_map)
+st_louis_concentration = st_louis_concentration.rename(col_name_map)
+st_louis_uncertainty = st_louis_uncertainty.rename(col_name_map)
 ```
 
 ### Concentration
@@ -215,7 +209,7 @@ st_louis_uncertainty_log = st_louis_uncertainty_log.rename(col_name_map)
 ```{python}
 #| label: first-glimpse-st-louis-concentration
 
-st_louis_concentration_log.with_columns(
+st_louis_concentration.with_columns(
     cs.numeric().round(5)
 ).glimpse()
 ```
@@ -226,8 +220,8 @@ st_louis_concentration_log.with_columns(
 
 (
     pl.concat([
-        st_louis_concentration_log.head(5),
-        st_louis_concentration_log.tail(5)
+        st_louis_concentration.head(5),
+        st_louis_concentration.tail(5)
     ])
     .style
     .fmt_datetime(
@@ -295,7 +289,10 @@ def write_long_data(
         pl.when(pl.col("concentration") != 0)
         .then(pl.col("uncertainty") / pl.col("concentration"))
         .otherwise(None)
-        .alias("uncertainty_ratio"),
+        .alias("uncertainty_ratio_raw"),
+        pl.col("concentration")
+        .log1p()
+        .alias("concentration_log")
     )
 
     combined = combined.with_columns(cs.numeric().round(6))
@@ -311,56 +308,112 @@ def write_long_data(
 #| eval: false
 
 write_long_data(
-    baltimore_concentration_log,
-    baltimore_uncertainty_log,
+    baltimore_concentration,
+    baltimore_uncertainty,
     "baltimore_long"
 )
 write_long_data(
-    baton_rouge_concentration_log,
-    baton_rouge_uncertainty_log,
+    baton_rouge_concentration,
+    baton_rouge_uncertainty,
     "baton_rouge_long"
 )
 write_long_data(
-    st_louis_concentration_log,
-    st_louis_uncertainty_log,
+    st_louis_concentration,
+    st_louis_uncertainty,
     "st_louis_long"
 )
 ```
 
 ```{python}
-#| label: write-wide-data
+#| label: write-wide-data-log
 #| eval: false
 
-baltimore_concentration_log.with_columns(
-    cs.numeric().round(6)
+baltimore_concentration.with_columns(
+    cs.numeric()
+    .log1p()
+    .round(6)
 ).write_csv(
-    here("data/wide/baltimore_concentration.csv")
+    here("data/wide/log/baltimore_concentration_log.csv")
 )
-baltimore_uncertainty_log.with_columns(
-    cs.numeric().round(6)
+baltimore_uncertainty.with_columns(
+    cs.numeric()
+    .log1p()
+    .round(6)
 ).write_csv(
-    here("data/wide/baltimore_uncertainty.csv")
-)
-
-baton_rouge_concentration_log.with_columns(
-    cs.numeric().round(6)
-).write_csv(
-    here("data/wide/baton_rouge_concentration.csv")
-)
-baton_rouge_uncertainty_log.with_columns(
-    cs.numeric().round(6)
-).write_csv(
-    here("data/wide/baton_rouge_uncertainty.csv")
+    here("data/wide/log/baltimore_uncertainty_log.csv")
 )
 
-st_louis_concentration_log.with_columns(
-    cs.numeric().round(6)
+baton_rouge_concentration.with_columns(
+    cs.numeric()
+    .log1p()
+    .round(6)
 ).write_csv(
-    here("data/wide/st_louis_concentration.csv")
+    here("data/wide/log/baton_rouge_concentration_log.csv")
 )
-st_louis_uncertainty_log.with_columns(
-    cs.numeric().round(6)
+baton_rouge_uncertainty.with_columns(
+    cs.numeric()
+    .log1p()
+    .round(6)
 ).write_csv(
-    here("data/wide/st_louis_uncertainty.csv")
+    here("data/wide/log/baton_rouge_uncertainty_log.csv")
+)
+
+st_louis_concentration.with_columns(
+    cs.numeric()
+    .log1p()
+    .round(6)
+).write_csv(
+    here("data/wide/log/st_louis_concentration_log.csv")
+)
+st_louis_uncertainty.with_columns(
+    cs.numeric()
+    .log1p()
+    .round(6)
+).write_csv(
+    here("data/wide/log/st_louis_uncertainty_log.csv")
+)
+```
+
+```{python}
+#| label: write-wide-data-raw
+#| eval: false
+
+baltimore_concentration.with_columns(
+    cs.numeric()
+    .round(6)
+).write_csv(
+    here("data/wide/raw/baltimore_concentration_raw.csv")
+)
+baltimore_uncertainty.with_columns(
+    cs.numeric()
+    .round(6)
+).write_csv(
+    here("data/wide/raw/baltimore_uncertainty_raw.csv")
+)
+
+baton_rouge_concentration.with_columns(
+    cs.numeric()
+    .round(6)
+).write_csv(
+    here("data/wide/raw/baton_rouge_concentration_raw.csv")
+)
+baton_rouge_uncertainty.with_columns(
+    cs.numeric()
+    .round(6)
+).write_csv(
+    here("data/wide/raw/baton_rouge_uncertainty_raw.csv")
+)
+
+st_louis_concentration.with_columns(
+    cs.numeric()
+    .round(6)
+).write_csv(
+    here("data/wide/raw/st_louis_concentration_raw.csv")
+)
+st_louis_uncertainty.with_columns(
+    cs.numeric()
+    .round(6)
+).write_csv(
+    here("data/wide/raw/st_louis_uncertainty_raw.csv")
 )
 ```
