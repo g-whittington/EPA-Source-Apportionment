@@ -1,9 +1,0 @@
-project:
-  title: "fall_presentation"
-  output-dir: docs
-
-
-format: 
-  revealjs:
-    slide-number: true
-    theme: solarized
