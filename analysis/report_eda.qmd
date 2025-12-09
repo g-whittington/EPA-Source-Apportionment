@@ -1,0 +1,137 @@
+---
+title: "Report EDA"
+author: George Whittington
+date: today
+date-format: long
+---
+
+```{python}
+#| label: libraries
+#| output: false
+
+import polars as pl
+import polars.selectors as cs
+
+import numpy as np
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+import great_tables
+
+from pyhere import here
+
+#plt.style.use("ggplot")
+sns.set_style("darkgrid", {"axes.facecolor": ".9"})
+sns.color_palette("crest", as_cmap=True);
+```
+
+# Data
+
+```{python}
+#| label: load-data
+
+# Baltimore Data
+# RAW Data For "Extreme Values" tables and "Uncertainty" checks
+baltimore_con_raw = pl.read_csv(here("data/wide/raw/baltimore_concentration_raw.csv"))
+baltimore_unc_raw = pl.read_csv(here("data/wide/raw/baltimore_uncertainty_raw.csv"))
+
+# LOGGED Data For Histograms, Heatmaps, and Pairplots
+baltimore_con_log = pl.read_csv(here("data/wide/log/baltimore_concentration_log.csv"))
+
+# LOGGED LONG Data For Faceted Plots / Uncertainty Ratios
+baltimore_long = pl.read_csv(here("data/long/baltimore_long.csv"))
+
+# Baton Rouge Data
+# RAW Data For "Extreme Values" tables and "Uncertainty" checks
+baton_rouge_con_raw = pl.read_csv(here("data/wide/raw/baton_rouge_concentration_raw.csv"))
+baton_rouge_unc_raw = pl.read_csv(here("data/wide/raw/baton_rouge_uncertainty_raw.csv"))
+
+# LOGGED Data For Histograms, Heatmaps, and Pairplots
+baton_rouge_con_log = pl.read_csv(here("data/wide/log/baton_rouge_concentration_log.csv"))
+
+# LOGGED LONG Data For Faceted Plots / Uncertainty Ratios
+baton_rouge_long = pl.read_csv(here("data/long/baton_rouge_long.csv"))
+
+# St. Louis Data
+# RAW Data For "Extreme Values" tables and "Uncertainty" checks
+st_louis_con_raw = pl.read_csv(here("data/wide/raw/st_louis_concentration_raw.csv"))
+st_louis_unc_raw = pl.read_csv(here("data/wide/raw/st_louis_uncertainty_raw.csv"))
+
+# LOGGED Data For Histograms, Heatmaps, and Pairplots
+st_louis_con_log = pl.read_csv(here("data/wide/log/st_louis_concentration_log.csv"))
+
+# LOGGED LONG Data For Faceted Plots / Uncertainty Ratios
+st_louis_long = pl.read_csv(here("data/long/st_louis_long.csv"))
+```
+
+# Baltimore
+
+## Univariate
+
+### Extreme Values
+
+### Why Log
+
+### Summary Statistics
+
+## Reliability
+
+### Uncertainty Ratio
+
+## Multivariate
+
+### Correlation Heatmap
+
+### Pairwise Scatter
+
+## Temporal
+
+### Time Series Trends
+
+# Baton Rouge 
+
+## Univariate
+
+### Extreme Values
+
+### Why Log
+
+### Summary Statistics
+
+## Reliability
+
+### Uncertainty Ratio
+
+## Multivariate
+
+### Correlation Heatmap
+
+### Pairwise Scatter
+
+## Temporal
+
+### Time Series Trends
+
+# St. Louis
+
+## Univariate
+
+### Extreme Values
+
+### Why Log
+
+### Summary Statistics
+
+## Reliability
+
+### Uncertainty Ratio
+
+## Multivariate
+
+### Correlation Heatmap
+
+### Pairwise Scatter
+
+## Temporal
+
+### Time Series Trends

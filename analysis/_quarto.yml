@@ -10,7 +10,7 @@ website:
   navbar: 
     left:
       - fix_data.qmd
-      - analysis.qmd
+      - presentation_eda.qmd
 
 
 format: 
