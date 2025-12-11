@@ -116,7 +116,7 @@ uncertainty_ratio_plot(baltimore_long, "Baltimore")
 #| label: fig-baltimore-heatmap-5
 #| fig-cap: Correlation Matrix of Key Species (Log Transformed)
 
-correlation_heatmap_plot(baltimore_con_log, "Baltimore", 5)
+correlation_heatmap_plot(baltimore_con_log, "Baltimore", 3)
 ```
 
 ```{python}
@@ -334,4 +334,79 @@ time_series_plot(
     "pm2.5",
     "St. Louis: PM2.5 Time Series (Log Scale)"
 )
+```
+
+
+```{python}
+#| label: tbl-dominant-species
+#| tbl-cap: Summary Statistics of Dominant Species Identified in Initial Examination
+
+# Combine and Style
+(
+    pl.concat([
+        dominant_species_stats(
+            baltimore_con_raw, "Baltimore", ["pm2.5", "om", "sulfate"]
+        ),
+        dominant_species_stats(
+            st_louis_con_raw, "St. Louis", ["pm2.5", "sulfate", "organic_carbon"]
+        ),
+        dominant_species_stats(
+            baton_rouge_con_raw, "Baton Rouge", ["ethane", "propane", "tnmoc"]
+        ),
+    ])
+    .style
+    .tab_header(
+        title="Dominant Chemical Species by City",
+        subtitle="Comparison of Physical Concentrations vs. Log-Transformed Model Inputs"
+    )
+    .fmt_number(columns=cs.numeric(), decimals=2)
+)
+```
+
+
+```{python}
+plot_top5_dominant(
+    [baltimore_con_raw, st_louis_con_raw, baton_rouge_con_raw],
+    ["Baltimore", "St. Louis", "Baton Rouge"]
+)
+```
+
+
+```{python}
+#| label: fig-baton-rouge-vocs
+
+plot_baton_rouge_variability(baton_rouge_con_log)
+```
+
+```{python}
+#| label: fig-episodic-ratios
+
+plot_episodic_ratios(baltimore_con_raw, st_louis_con_raw, baton_rouge_con_raw)
+```
+
+```{python}
+fig, ax = plt.subplots()
+
+corr_matrix = (
+    baltimore_con_log
+    .select(
+        "tnmoc",
+        "propane",
+        "ethane",
+        "isopentane"]
+    )
+    .to_pandas()
+    .corr(numeric_only=True)
+    .transpose()
+)
+
+sns.heatmap(
+    corr_matrix,
+    annot=True,
+    cmap='RdBu_r',
+    ax=ax
+)
+
+ax.set_title("Baltimore: Top 5 PM Components Correlation")
+ax.invert_yaxis()
 ```
