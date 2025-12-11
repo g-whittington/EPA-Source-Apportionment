@@ -11,7 +11,6 @@ date-format: long
 
 import polars as pl
 import polars.selectors as cs
-from great_tables._heading import tab_header
 
 import numpy as np
 
@@ -20,6 +19,8 @@ import seaborn as sns
 import great_tables
 
 from pyhere import here
+
+from analysis.helper import * 
 
 #plt.style.use("ggplot")
 sns.set_style("darkgrid", {"axes.facecolor": ".9"})
@@ -75,28 +76,7 @@ st_louis_long = pl.read_csv(here("data/long/st_louis_long.csv"))
 #| label: tbl-baltimore-extreme-values
 #| tbl-cap: Top 5 Species by Max/Mean Ratio (Raw Data)
 
-(
-    baltimore_con_raw
-    .unpivot(index="date", variable_name="species", value_name="concentration")
-    .group_by("species")
-    .agg(
-        pl.col("concentration").mean().alias("mean"),
-        pl.col("concentration").max().alias("max")
-    )
-    .with_columns(
-        (pl.col("max") / pl.col("mean")).alias("max_mean_ratio")
-    )
-    .sort("max_mean_ratio", descending=True)
-    .head(5)
-    .select("species", "mean", "max", "max_mean_ratio")
-    .style
-    .fmt_number(cs.numeric(), decimals=4)
-    .tab_header(
-        title="Baltimore Extreme Value Audit",
-        subtitle="Top 5 Species by Max-to-Mean Ratio"
-    )
-    .opt_row_striping()
-)
+extreme_values_table(baltimore_con_raw, "Baltimore")
 ```
 
 ### Why Log
@@ -105,23 +85,7 @@ st_louis_long = pl.read_csv(here("data/long/st_louis_long.csv"))
 #| label: fig-baltimore-why-log
 #| fig-cap: Distribution of PM2.5 (Raw vs Log-Transformed)
 
-target_col = "pm2.5" 
-
-fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-
-# Plot 1: Raw Data (Right Skewed)
-sns.histplot(data=baltimore_con_raw, x=target_col, ax=axs[0], bins=30)
-axs[0].set_xlabel(f"{target_col} (Raw)")
-axs[0].set_title("Raw Data")
-
-# Plot 2: Log Data (Normal-ish)
-sns.histplot(data=baltimore_con_log, x=target_col, ax=axs[1], bins=30)
-axs[1].set_xlabel(f"{target_col} (Log Scale)")
-axs[1].set_title("Log Transformed")
-
-fig.suptitle("Distribution of PM2.5 (Raw vs Log-Transformed)")
-
-plt.tight_layout()
+log_comparison_plot(baltimore_con_raw, baltimore_con_log, target_col = "pm2.5")
 ```
 
 ### Summary Statistics
@@ -130,28 +94,7 @@ plt.tight_layout()
 #| label: tbl-baltimore-summary
 #| tbl-cap: Summary Statistics and Sparsity Check
 
-(
-    baltimore_con_raw
-    .unpivot(index="date", variable_name="species", value_name="concentration")
-    .group_by("species")
-    .agg(
-        pl.col("concentration").mean().alias("mean"),
-        pl.col("concentration").median().alias("median"),
-        # Calculate % zeros by taking the mean of a boolean expression (True=1, False=0)
-        (pl.col("concentration") == 0).mean().alias("pct_zeros")
-    )
-    .sort("mean", descending=True)
-    .head(10)
-    .with_columns(
-        # Optional: formatting for display (or handle in style)
-        pl.col("pct_zeros")
-    )
-    .style
-    .tab_header("Summary Statistics and Sparsity Check")
-    .fmt_number(columns=["mean", "median"], decimals=4)
-    .fmt_percent(columns=["pct_zeros"], decimals=1)
-    .opt_row_striping()
-)
+summary_statistics(baltimore_con_raw)
 ```
 
 ## Reliability
@@ -162,27 +105,7 @@ plt.tight_layout()
 #| label: fig-baltimore-uncertainty
 #| fig-cap: Distribution of Uncertainty Ratios (Sigma / Concentration)
 
-# Filter out extreme ratios (>1.0) just for plotting clarity
-plot_data = (
-    baltimore_long
-    .filter(pl.col("uncertainty_ratio_raw") < 1.0)
-    .to_pandas()
-)
-
-plt.figure(figsize=(8, 10))
-sns.boxplot(
-    data=plot_data,
-    x="uncertainty_ratio_raw",
-    y="species",
-    orient="h",
-    fliersize=1,
-    linewidth=0.8
-)
-
-plt.title("Baltimore: Sensor Reliability Audit")
-plt.xlabel("Uncertainty Ratio (Uncertainty / Concentration)")
-plt.axvline(x=0.2, color='r', linestyle='--', alpha=0.5, label="20% Error Threshold")
-plt.legend(loc="lower right")
+uncertainty_ratio_plot(baltimore_long, "Baltimore")
 ```
 
 ## Multivariate
@@ -190,29 +113,17 @@ plt.legend(loc="lower right")
 ### Correlation Heatmap
 
 ```{python}
-#| label: fig-baltimore-heatmap
+#| label: fig-baltimore-heatmap-5
 #| fig-cap: Correlation Matrix of Key Species (Log Transformed)
 
-# 1. Calculate Correlation on LOG data
-# Select only numeric columns, drop date
-corr_matrix = (
-    baltimore_con_log
-    .select(cs.numeric())
-    .to_pandas()
-    .corr()
-)
+correlation_heatmap_plot(baltimore_con_log, "Baltimore", 5)
+```
 
-# 2. Plot
-plt.figure(figsize=(12, 10))
-sns.heatmap(
-    corr_matrix,
-    cmap='RdBu_r', # Red = Positive Correlation (Moving Together)
-    center=0,
-    square=True,
-    cbar_kws={"shrink": .5}
-)
+```{python}
+#| label: fig-baltimore-heatmap-13
+#| fig-cap: Correlation Matrix of Key Species (Log Transformed)
 
-plt.title("Baltimore: Species Correlation Matrix")
+correlation_heatmap_plot(baltimore_con_log, "Baltimore", 13)
 ```
 
 ### Pairwise Scatter
@@ -221,20 +132,11 @@ plt.title("Baltimore: Species Correlation Matrix")
 #| label: fig-baltimore-pairs
 #| fig-cap: Pairwise Relationships of Top Correlated Species
 
-# Select a few known related species (e.g., combustion markers)
-# You can adjust these names based on what you see in the heatmap
-target_species = ["elemental_carbon", "organic_carbon", "sulfate", "ammonium_ion", "pm2.5"]
-
-# Filter to existing columns just in case
-existing_species = [c for c in target_species if c in baltimore_con_log.columns]
-
-sns.pairplot(
-    baltimore_con_log.select(existing_species).to_pandas(),
-    plot_kws={'alpha': 0.5, 's': 10},
-    diag_kind='kde'
+pairwise_scatter_plot(
+    baltimore_con_log,
+    "Baltimore: Combustion & Secondary Aerosol Markers",
+    ["elemental_carbon", "organic_carbon", "sulfate", "ammonium_ion", "pm2.5"],
 )
-
-plt.suptitle("Baltimore: Combustion & Secondary Aerosol Markers", y=1.02)
 ```
 
 ## Temporal
@@ -245,18 +147,11 @@ plt.suptitle("Baltimore: Combustion & Secondary Aerosol Markers", y=1.02)
 #| label: fig-baltimore-time
 #| fig-cap: Temporal Trends of PM2.5 (Log Scale)
 
-plt.figure(figsize=(12, 5))
-
-sns.lineplot(
-    data=baltimore_con_log.to_pandas(),
-    x="date",
-    y="pm2.5",
-    alpha=0.7
+time_series_plot(
+    baltimore_con_log,
+    "pm2.5",
+    "Baltimore: PM2.5 Time Series (Log Scale)"
 )
-
-plt.title("Baltimore: PM2.5 Time Series (Log Scale)")
-plt.ylabel("Log(Concentration + 1)")
-plt.xlabel("Date")
 ```
 
 # Baton Rouge 
@@ -269,40 +164,25 @@ plt.xlabel("Date")
 #| label: tbl-baton-rouge-extreme-values
 #| tbl-cap: Top 5 Species by Max/Mean Ratio (Raw Data)
 
-(
-    baton_rouge_con_raw
-    .unpivot(index="date", variable_name="species", value_name="concentration")
-    .group_by("species")
-    .agg(
-        pl.col("concentration").mean().alias("mean"),
-        pl.col("concentration").max().alias("max")
-    )
-    .with_columns(
-        (pl.col("max") / pl.col("mean")).alias("max_mean_ratio")
-    )
-    .sort("max_mean_ratio", descending=True)
-    .head(5)
-    .select("species", "mean", "max", "max_mean_ratio")
-    .style
-    .fmt_number(cs.numeric(), decimals=4)
-    .tab_header(
-        title="Baton Rouge Extreme Value Audit",
-        subtitle="Top 5 Species by Max-to-Mean Ratio"
-    )
-    .opt_row_striping()
-)
+extreme_values_table(baton_rouge_con_raw, "Baton Rouge")
 ```
 
 ### Why Log
 
 ```{python}
+#| label: fig-baton-rouge-why-log
+#| fig-cap: Distribution of TNMOC (Raw vs Log-Transformed)
 
+log_comparison_plot(baton_rouge_con_raw, baton_rouge_con_log, target_col = "tnmoc")
 ```
 
 ### Summary Statistics
 
 ```{python}
+#| label: tbl-baton-rouge-summary
+#| tbl-cap: Summary Statistics and Sparsity Check
 
+summary_statistics(baton_rouge_con_raw)
 ```
 
 ## Reliability
@@ -310,7 +190,10 @@ plt.xlabel("Date")
 ### Uncertainty Ratio
 
 ```{python}
+#| label: fig-baton-rouge-uncertainty
+#| fig-cap: Distribution of Uncertainty Ratios (Sigma / Concentration)
 
+uncertainty_ratio_plot(baton_rouge_long, "Baton Rouge")
 ```
 
 ## Multivariate
@@ -318,13 +201,37 @@ plt.xlabel("Date")
 ### Correlation Heatmap
 
 ```{python}
+#| label: fig-baton-rouge-heatmap-5
+#| fig-cap: Correlation Matrix of Key Species (Log Transformed)
 
+correlation_heatmap_plot(baton_rouge_con_log, "Baton Rouge", 5)
+```
+
+```{python}
+#| label: fig-baton-rouge-heatmap-full
+#| fig-cap: Correlation Matrix of Key Species (Log Transformed)
+
+correlation_heatmap_plot(baton_rouge_con_log, "Baton Rouge")
 ```
 
 ### Pairwise Scatter
 
 ```{python}
+#| label: fig-baton-rouge-pairs
+#| fig-cap: Pairwise Relationships of Top Correlated Species
 
+pairwise_scatter_plot(
+    baton_rouge_con_log,
+    "Baton Rouge: BTEX & TNMOC (Refinery Markers)",
+    target_species = [
+        "benzene", 
+        "toluene", 
+        "ethylbenzene", 
+        "m_p_xylene", 
+        "o-xylene", 
+        "tnmoc"
+    ]
+)
 ```
 
 ## Temporal
@@ -332,7 +239,14 @@ plt.xlabel("Date")
 ### Time Series Trends
 
 ```{python}
+#| label: fig-baton-rouge-time
+#| fig-cap: Temporal Trends of TNMOC (Log Scale)
 
+time_series_plot(
+    baton_rouge_con_log,
+    "tnmoc",
+    "Baton Rouge: TNMOC Time Series (Log Scale)"
+)
 ```
 
 # St. Louis
@@ -342,19 +256,28 @@ plt.xlabel("Date")
 ### Extreme Values
 
 ```{python}
+#| label: tbl-st-louis-extreme-values
+#| tbl-cap: Top 5 Species by Max/Mean Ratio (Raw Data)
 
+extreme_values_table(st_louis_con_raw, "St. Louis")
 ```
 
 ### Why Log
 
 ```{python}
+#| label: fig-st-louis-why-log
+#| fig-cap: Distribution of PM2.5 (Raw vs Log-Transformed)
 
+log_comparison_plot(st_louis_con_raw, st_louis_con_log, target_col = "pm2.5")
 ```
 
 ### Summary Statistics
 
 ```{python}
+#| label: tbl-st-louis-summary
+#| tbl-cap: Summary Statistics and Sparsity Check
 
+summary_statistics(st_louis_con_raw)
 ```
 
 ## Reliability
@@ -362,7 +285,10 @@ plt.xlabel("Date")
 ### Uncertainty Ratio
 
 ```{python}
+#| label: fig-st-louis-uncertainty
+#| fig-cap: Distribution of Uncertainty Ratios (Sigma / Concentration)
 
+uncertainty_ratio_plot(st_louis_long, "St. Louis")
 ```
 
 ## Multivariate
@@ -370,13 +296,29 @@ plt.xlabel("Date")
 ### Correlation Heatmap
 
 ```{python}
+#| label: fig-st-louis-heatmap
+#| fig-cap: Correlation Matrix of Key Species (Log Transformed)
 
+correlation_heatmap_plot(st_louis_con_log, "St. Louis", num_values=13)
 ```
 
 ### Pairwise Scatter
 
 ```{python}
+#| label: fig-st-louis-pairs
+#| fig-cap: Pairwise Relationships of Top Correlated Species
 
+pairwise_scatter_plot(
+    st_louis_con_log,
+   "St. Louis: Major PM Constituents",
+    target_species = [
+        "pm2.5",
+        "sulfate",
+        "total_nitrate",
+        "organic_carbon", 
+        "elemental_carbon"
+    ]
+)
 ```
 
 ## Temporal
@@ -384,5 +326,12 @@ plt.xlabel("Date")
 ### Time Series Trends
 
 ```{python}
+#| label: fig-st-louis-time
+#| fig-cap: Temporal Trends of PM2.5 (Log Scale)
 
+time_series_plot(
+    st_louis_con_log,
+    "pm2.5",
+    "St. Louis: PM2.5 Time Series (Log Scale)"
+)
 ```
