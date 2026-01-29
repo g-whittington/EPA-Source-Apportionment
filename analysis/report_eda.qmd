@@ -18,6 +18,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import great_tables
 
+from plotnine import (
+    ggplot, aes, labs, theme, 
+    geom_errorbar, geom_point,
+    facet_wrap, coord_flip,
+    theme_minimal
+)
+
 from pyhere import here
 
 from analysis.helper import * 
@@ -384,29 +391,3 @@ plot_baton_rouge_variability(baton_rouge_con_log)
 plot_episodic_ratios(baltimore_con_raw, st_louis_con_raw, baton_rouge_con_raw)
 ```
 
-```{python}
-fig, ax = plt.subplots()
-
-corr_matrix = (
-    baltimore_con_log
-    .select(
-        "tnmoc",
-        "propane",
-        "ethane",
-        "isopentane"]
-    )
-    .to_pandas()
-    .corr(numeric_only=True)
-    .transpose()
-)
-
-sns.heatmap(
-    corr_matrix,
-    annot=True,
-    cmap='RdBu_r',
-    ax=ax
-)
-
-ax.set_title("Baltimore: Top 5 PM Components Correlation")
-ax.invert_yaxis()
-```

@@ -5,8 +5,18 @@
 import polars as pl
 import polars.selectors as cs
 
+import pandas as pd
+
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+from plotnine import (
+    ggplot, aes, labs, theme, 
+    geom_errorbarh, geom_point,
+    facet_wrap, element_text,
+    theme_minimal,scale_y_discrete,
+    element_blank
+)
 
 # TODO: Add in doc strings and comment code
 
@@ -195,48 +205,71 @@ def plot_top5_dominant(df_list, city_names):
     top_data = []
 
     for df, city in zip(df_list, city_names):
-        # 1. Calculate Log-Mean for every species
         stats = (
             df
             .unpivot(index="date", variable_name="species", value_name="concentration")
+            .with_columns(log_val=pl.col("concentration").log1p())
             .group_by("species")
             .agg(
-                # Text uses Log Mean values (e.g. 2.7, 3.1), so we calc that
-                pl.col("concentration").log1p().mean().alias("log_mean")
+                mean=pl.col("log_val").mean(),
+                std=pl.col("log_val").std()
             )
-            .sort("log_mean", descending=True)
-            .head(5) # Grab top 5
+            .sort("mean", descending=True)
+            .head(5) 
             .with_columns(pl.lit(city).alias("City"))
         )
         top_data.append(stats)
 
-    # 2. Combine for plotting
     plot_df = pl.concat(top_data).to_pandas()
 
-    # 3. Faceted Plot
-    g = sns.FacetGrid(plot_df, col="City", sharex=False, sharey=False, height=4, aspect=1.2)
+    # --- 1. Create a Unique ID for correct sorting per panel ---
+    # We combine City + Species so "Sulfate" in Baltimore is distinct from "Sulfate" in St. Louis
+    plot_df['unique_id'] = plot_df['species'] + "_" + plot_df['City']
+
+    # --- 2. Sort the data so the dots appear High -> Low ---
+    plot_df = plot_df.sort_values(['City', 'mean'], ascending=[True, True])
     
-    # Map the barplot
-    g.map_dataframe(
-        sns.barplot,
-        x="log_mean",
-        y="species",
-        palette="viridis",
-        orient="h"
+    # Lock this order in as a Categorical type
+    plot_df['unique_id'] = pd.Categorical(
+        plot_df['unique_id'], 
+        categories=plot_df['unique_id'], 
+        ordered=True
     )
 
-    # 4. Polish the aesthetics
-    g.set_titles("{col_name}")
-    g.set_xlabels("Log Mean Concentration")
-    g.set_ylabels("Chemical Species")
-    
-    # Add exact number labels to bars (Data Description style)
-    for ax in g.axes.flat:
-        for i, container in enumerate(ax.containers):
-            ax.bar_label(container, fmt='%.1f', padding=3)
+    # --- 3. Create a Label Mapper ---
+    # This dictionary tells the plot: "When you see 'Sulfate_Baltimore', just print 'Sulfate'"
+    label_map = dict(zip(plot_df['unique_id'], plot_df['species']))
 
-    plt.subplots_adjust(top=0.85)
-    g.figure.suptitle("Dominant Pollution Profile by City (Top 5 Species)", fontsize=16)
+    # --- 4. Plot ---
+    g = (
+        ggplot(plot_df, aes(x="mean", y="unique_id"))
+        
+        # The Whiskers (Standard Deviation)
+        + geom_errorbarh(aes(xmin="mean - std", xmax="mean + std"), height=0.3, color="#555555")
+        
+        # The Point (Mean)
+        + geom_point(size=3.5, color="#2c7bb6", fill="white", stroke=1.5)
+        
+        # The Facets (scales="free_y" is crucial here)
+        + facet_wrap("~City", scales="free_y", ncol=3)
+        
+        # Apply our custom label map so we don't see the ugly unique IDs
+        + scale_y_discrete(labels=label_map)
+        
+        + labs(
+            x="Log Mean Concentration (+ Std Dev)", 
+            y=None, # Remove Y label since species names are self-explanatory
+            title="Dominant Pollution Profile by City (Top 5 Species)"
+        )
+        + theme_minimal()
+        + theme(
+            figure_size=(12, 5),
+            panel_spacing=0.4,       # Adds breathing room between the 3 plots
+            strip_text=element_text(size=12, weight="bold"), # Makes City titles bigger
+            axis_text_y=element_text(size=10, color="black"),
+            panel_grid_major_y=element_blank() # Removes horizontal grid lines for a cleaner look
+        )
+    )
 
     return g
 
@@ -301,13 +334,12 @@ def plot_baton_rouge_variability(df_log):
 
     plt.figure(figsize=(10, 6))
     
-    sns.boxplot(
+    sns.violinplot(
         data=plot_data,
         x="Log Concentration",
         y="Species",
         order=target_vocs, 
-        palette="rocket",
-        fliersize=3,      
+        palette="rocket",   
         linewidth=1
     )
 
