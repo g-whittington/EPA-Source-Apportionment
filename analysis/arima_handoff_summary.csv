@@ -1,0 +1,4 @@
+city,adf_p,adf_verdict,kpss_p,kpss_verdict,ljung_box_p,autocorrelation,recommended_d,arima_ready
+Baltimore,0.01,Stationary,0.1,Stationary,2.0236524889138963e-7,Yes,0,YES — hand off
+Baton Rouge,0.01,Stationary,0.1,Stationary,0.15143869153158518,No,0,CHECK — may be white noise
+St. Louis,0.01,Stationary,0.0249,Non-stationary,0,Yes,1,YES — hand off

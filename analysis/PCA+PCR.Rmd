@@ -1,0 +1,603 @@
+---
+title: "PCA & PCR Analysis: Baltimore, Baton Rouge, St. Louis"
+output: html_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                      fig.width = 8, fig.height = 5)
+```
+
+# ── 0. Libraries ─────────────────────────────────────────────────────────────
+
+```{r libraries}
+library(tidyverse)
+library(factoextra)
+library(psych)
+library(broom)
+library(lmtest)      # bptest
+library(car)         # ncvTest
+library(gridExtra)
+library(stringr)
+library(tseries)     # adf.test, kpss.test
+library(forecast)    # Acf, Pacf
+
+library(conflicted)
+conflict_prefer("filter",    "dplyr")
+conflict_prefer("lag",       "dplyr")
+conflict_prefer("select",    "dplyr")
+conflict_prefer("summarise", "dplyr")
+```
+
+# ── 1. Config ────────────────────────────────────────────────────────────────
+
+```{r config}
+baltimore_path  <- "baltimore_concentration_log.csv"
+batonrouge_path <- "baton_rouge_concentration_log.csv"
+stlouis_path    <- "st_louis_concentration_log.csv"
+
+# Columns to drop before PCA (response + identifiers removed from predictors)
+drops_tbl <- tibble(
+  city = c("Baltimore", "Baton Rouge", "St. Louis"),
+  drop_cols = list(
+    c("date", "om", "chromium", "pm2.5", "total_nitrate"),
+    c("date", "tnmoc"),
+    c("date", "pm2.5", "total_nitrate")
+  )
+)
+
+# Response variable for PCR
+y_map <- tibble(
+  city  = c("Baltimore", "Baton Rouge", "St. Louis"),
+  y_col = c("pm2.5",     "tnmoc",       "pm2.5")
+)
+
+paths_tbl <- tibble(
+  city     = c("Baltimore", "Baton Rouge", "St. Louis"),
+  filepath = c(baltimore_path, batonrouge_path, stlouis_path)
+)
+
+# Variance threshold — k = smallest number of PCs reaching this
+VARIANCE_THRESHOLD <- 0.70
+```
+
+# ── 2. Helper Functions ──────────────────────────────────────────────────────
+
+```{r helpers}
+drop_existing <- function(df, drop_cols) {
+  drop_cols <- drop_cols[drop_cols %in% names(df)]
+  df %>% select(-all_of(drop_cols))
+}
+
+pca_variance_tbl <- function(pca_obj, city_name) {
+  prop_var <- (pca_obj$sdev^2) / sum(pca_obj$sdev^2)
+  tibble(
+    city       = city_name,
+    PC         = paste0("PC", seq_along(prop_var)),
+    PC_num     = seq_along(prop_var),
+    eigenvalue = pca_obj$sdev^2,
+    prop_var   = prop_var,
+    cum_var    = cumsum(prop_var)
+  )
+}
+
+pca_loadings_tbl <- function(pca_obj, city_name) {
+  as.data.frame(pca_obj$rotation) %>%
+    rownames_to_column("variable") %>%
+    as_tibble() %>%
+    mutate(city = city_name) %>%
+    relocate(city, variable)
+}
+
+pca_scores_tbl <- function(pca_obj, city_name) {
+  as.data.frame(pca_obj$x) %>%
+    as_tibble() %>%
+    mutate(city = city_name) %>%
+    relocate(city)
+}
+
+# Build aligned X + y, keeping date for export
+build_xy_aligned <- function(city_name) {
+  filepath  <- paths_tbl %>% filter(city == city_name) %>% pull(filepath)
+  drop_cols <- drops_tbl %>% filter(city == city_name) %>% pull(drop_cols) %>% .[[1]]
+  y_col     <- y_map     %>% filter(city == city_name) %>% pull(y_col)
+
+  df_raw <- read_csv(filepath, show_col_types = FALSE) %>%
+    mutate(date = as.Date(date), .row_id = row_number())
+
+  if (!y_col %in% names(df_raw))
+    stop(paste0("Response column '", y_col, "' not found for ", city_name))
+
+  X_tbl <- df_raw %>%
+    drop_existing(drop_cols) %>%
+    select(.row_id, where(is.numeric)) %>%
+    drop_na()
+
+  y_tbl <- df_raw %>% transmute(.row_id, date, y = .data[[y_col]])
+
+  X_tbl %>%
+    inner_join(y_tbl, by = ".row_id") %>%
+    mutate(city = city_name) %>%
+    select(city, date, y, -.row_id, everything()) %>%
+    arrange(date)
+}
+
+# Smallest k where cumulative variance >= threshold
+choose_k_by_variance <- function(pca_obj, threshold = VARIANCE_THRESHOLD) {
+  cum_var <- cumsum(pca_obj$sdev^2) / sum(pca_obj$sdev^2)
+  which(cum_var >= threshold)[1]
+}
+```
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PART I — PRINCIPAL COMPONENTS ANALYSIS (EDA)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── 3. Run PCA ───────────────────────────────────────────────────────────────
+
+```{r run_pca}
+run_city_pca <- function(city_name) {
+  filepath  <- paths_tbl %>% filter(city == city_name) %>% pull(filepath)
+  drop_cols <- drops_tbl %>% filter(city == city_name) %>% pull(drop_cols) %>% .[[1]]
+
+  df_num <- read_csv(filepath, show_col_types = FALSE) %>%
+    drop_existing(drop_cols) %>%
+    select(where(is.numeric)) %>%
+    drop_na()
+
+  pca_fit <- prcomp(df_num, center = TRUE, scale. = TRUE)
+
+  list(
+    city      = city_name,
+    data_used = df_num,
+    pca       = pca_fit,
+    var_tbl   = pca_variance_tbl(pca_fit, city_name),
+    loadings  = pca_loadings_tbl(pca_fit, city_name),
+    scores    = pca_scores_tbl(pca_fit, city_name)
+  )
+}
+
+res_balt <- run_city_pca("Baltimore")
+res_br   <- run_city_pca("Baton Rouge")
+res_stl  <- run_city_pca("St. Louis")
+
+variance_all <- bind_rows(res_balt$var_tbl, res_br$var_tbl, res_stl$var_tbl)
+loadings_all <- bind_rows(res_balt$loadings, res_br$loadings, res_stl$loadings)
+scores_all   <- bind_rows(res_balt$scores,  res_br$scores,  res_stl$scores)
+
+# Auto-select k at 70% threshold for each city
+k70_tbl <- tibble(city = c("Baltimore", "Baton Rouge", "St. Louis")) %>%
+  mutate(k = map_int(city, ~choose_k_by_variance(run_city_pca(.x)$pca)))
+
+cat("=== k selected at 70% variance threshold ===\n")
+print(k70_tbl)
+```
+
+# ── 4. Scree Plots & Cumulative Variance ─────────────────────────────────────
+
+```{r scree_plots, fig.height=4}
+scree_df <- variance_all %>% left_join(k70_tbl, by = "city")
+
+# Proportion of variance per PC
+ggplot(scree_df, aes(x = PC_num, y = prop_var)) +
+  geom_line() +
+  geom_point(size = 1.8) +
+  geom_vline(aes(xintercept = k), linetype = 2, color = "steelblue") +
+  facet_wrap(~ city, nrow = 1, scales = "free_x") +
+  labs(
+    title    = "Scree Plots by City",
+    subtitle = "Dashed line = 70% variance threshold k",
+    x = "Principal Component",
+    y = "Proportion of Variance Explained"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(plot.title    = element_text(face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5, color = "gray40"),
+        panel.grid.minor = element_blank())
+
+# Cumulative variance
+ggplot(scree_df, aes(x = PC_num, y = cum_var)) +
+  geom_line() +
+  geom_point(size = 1.8) +
+  geom_vline(aes(xintercept = k), linetype = 2, color = "steelblue") +
+  geom_hline(yintercept = 0.80, linetype = 3, color = "gray40") +
+  geom_hline(yintercept = 0.70, linetype = 3, color = "tomato") +
+  facet_wrap(~ city, nrow = 1, scales = "free_x") +
+  labs(
+    title    = "Cumulative Variance Explained",
+    subtitle = "Dashed = 70% k  |  Gray = 80% reference  |  Red = 70% threshold",
+    x = "Principal Component",
+    y = "Cumulative Proportion of Variance"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(plot.title    = element_text(face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5, color = "gray40"),
+        panel.grid.minor = element_blank())
+```
+
+# ── 5. Factor Loadings Heatmaps ──────────────────────────────────────────────
+
+```{r factor_loadings, fig.height=6}
+top_loadings <- loadings_all %>%
+  pivot_longer(starts_with("PC"), names_to = "PC", values_to = "loading") %>%
+  mutate(PC_num = as.integer(str_remove(PC, "PC"))) %>%
+  inner_join(k70_tbl, by = "city") %>%
+  filter(PC_num <= k) %>%
+  group_by(city, PC, PC_num) %>%
+  slice_max(abs(loading), n = 5) %>%
+  ungroup() %>%
+  arrange(city, PC_num, desc(abs(loading)))
+
+cat("=== Top 5 Loadings per Retained PC (70% threshold) ===\n")
+print(top_loadings)
+
+plot_loading_heatmap <- function(city_name, k_val) {
+  loadings_all %>%
+    filter(city == city_name) %>%
+    pivot_longer(starts_with("PC"), names_to = "PC", values_to = "loading") %>%
+    mutate(PC_num = as.integer(str_remove(PC, "PC"))) %>%
+    filter(PC_num <= k_val) %>%
+    ggplot(aes(x = PC, y = variable, fill = loading)) +
+    geom_tile(color = "white") +
+    scale_fill_gradient2(low = "tomato", mid = "white", high = "steelblue",
+                         midpoint = 0, limits = c(-1, 1)) +
+    labs(title = paste0(city_name, ": Factor Loadings (PC1-PC", k_val, ")"),
+         x = NULL, y = NULL, fill = "Loading") +
+    theme_minimal(base_size = 10) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          plot.title  = element_text(face = "bold", hjust = 0.5))
+}
+
+k_vals <- setNames(k70_tbl$k, k70_tbl$city)
+plot_loading_heatmap("Baltimore",   k_vals["Baltimore"])
+plot_loading_heatmap("Baton Rouge", k_vals["Baton Rouge"])
+plot_loading_heatmap("St. Louis",   k_vals["St. Louis"])
+```
+
+# ── 6. PC Score Scatter: PC1 vs PC2 ─────────────────────────────────────────
+
+```{r pc_scores}
+scores_all %>%
+  select(city, PC1, PC2) %>%
+  ggplot(aes(x = PC1, y = PC2)) +
+  geom_point(alpha = 0.45, size = 1) +
+  facet_wrap(~ city, scales = "free") +
+  labs(title = "PCA Scores: PC1 vs PC2", x = "PC1", y = "PC2") +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5))
+```
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PART II — OLS PCR (70% Variance Threshold)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── 7. Fit OLS PCR ───────────────────────────────────────────────────────────
+
+```{r pcr_fit}
+fit_pcr_70 <- function(city_name) {
+  df_xy <- build_xy_aligned(city_name)
+  y     <- df_xy$y
+  X     <- df_xy %>% select(-city, -date, -y)
+
+  pca_fit <- prcomp(X, center = TRUE, scale. = TRUE)
+  k       <- choose_k_by_variance(pca_fit, VARIANCE_THRESHOLD)
+  cum_var <- cumsum(pca_fit$sdev^2 / sum(pca_fit$sdev^2))[k]
+
+  cat(city_name, "-> k =", k, sprintf("| cum. var = %.1f%%\n", cum_var * 100))
+
+  Z <- as.data.frame(pca_fit$x[, 1:k, drop = FALSE])
+  colnames(Z) <- paste0("PC", 1:k)
+
+  mod <- lm(y ~ ., data = Z)
+
+  # Standardized betas for bar chart
+  Z_sc  <- as_tibble(scale(Z))
+  y_sc  <- as.numeric(scale(y))
+  std_b <- lm(y_sc ~ ., data = bind_cols(tibble(y_sc = y_sc), Z_sc)) %>%
+    tidy() %>%
+    filter(term != "(Intercept)") %>%
+    mutate(abs_beta = abs(estimate),
+           PC_num   = as.integer(str_remove(term, "PC"))) %>%
+    arrange(PC_num)
+
+  s <- summary(mod)
+  metrics <- tibble(
+    city        = city_name,
+    k           = k,
+    cum_var_pct = round(cum_var * 100, 1),
+    n           = nobs(mod),
+    r2          = s$r.squared,
+    adj_r2      = s$adj.r.squared,
+    rmse        = sqrt(mean(resid(mod)^2))
+  )
+
+  list(
+    city      = city_name,
+    k         = k,
+    cum_var   = cum_var,
+    df_xy     = df_xy,
+    X         = X,
+    pca       = pca_fit,
+    Z         = Z,
+    y         = y,
+    model     = mod,
+    std_beta  = std_b,
+    metrics   = metrics,
+    resid_tbl = tibble(city = city_name, date = df_xy$date, y = y,
+                       fitted = fitted(mod), residual = resid(mod))
+  )
+}
+
+pcr_balt <- fit_pcr_70("Baltimore")
+pcr_br   <- fit_pcr_70("Baton Rouge")
+pcr_stl  <- fit_pcr_70("St. Louis")
+
+pcr_metrics <- bind_rows(pcr_balt$metrics, pcr_br$metrics, pcr_stl$metrics)
+cat("\n=== OLS PCR Metrics (70% Threshold) ===\n")
+print(pcr_metrics)
+```
+
+# ── 8. PC Weight Bar Charts ──────────────────────────────────────────────────
+
+```{r pc_weights, fig.height=4}
+plot_pc_weights <- function(pcr_obj) {
+  pcr_obj$std_beta %>%
+    ggplot(aes(x = reorder(term, abs_beta), y = abs_beta)) +
+    geom_col(fill = "steelblue") +
+    coord_flip() +
+    labs(
+      title    = paste0(pcr_obj$city, ": PC Importance (|Standardized beta|)"),
+      subtitle = paste0("k = ", pcr_obj$k,
+                        "  |  ", round(pcr_obj$cum_var * 100, 1),
+                        "% variance explained"),
+      x = "Principal Component",
+      y = "|Standardized Coefficient|"
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(plot.title    = element_text(face = "bold", hjust = 0.5),
+          plot.subtitle = element_text(hjust = 0.5, color = "gray40"))
+}
+
+plot_pc_weights(pcr_balt)
+plot_pc_weights(pcr_br)
+plot_pc_weights(pcr_stl)
+```
+
+# ── 9. OLS Diagnostics ───────────────────────────────────────────────────────
+
+```{r ols_diagnostics, fig.height=6}
+run_ols_diagnostics <- function(pcr_obj) {
+  city <- pcr_obj$city
+  mod  <- pcr_obj$model
+  n    <- nobs(mod)
+  aug  <- augment(mod)
+  if (!(".hat" %in% names(aug))) aug$.hat <- hatvalues(mod)
+
+  cat("\n\n=========================================\n")
+  cat(city, "| k =", pcr_obj$k,
+      sprintf("| cum. var = %.1f%%\n", pcr_obj$cum_var * 100))
+  cat("=========================================\n")
+
+  sw  <- shapiro.test(resid(mod))
+  bp  <- bptest(mod)
+  ncv <- car::ncvTest(mod)
+
+  cat("\nNormality        - Shapiro-Wilk   p =", round(sw$p.value, 4),
+      ifelse(sw$p.value < 0.05, "  *** VIOLATION", "  OK"), "\n")
+  cat("Homoscedasticity - Breusch-Pagan  p =", round(bp$p.value, 4),
+      ifelse(bp$p.value < 0.05, "  *** VIOLATION", "  OK"), "\n")
+  cat("Homoscedasticity - NCV Test       p =", round(ncv$p,      4),
+      ifelse(ncv$p      < 0.05, "  *** VIOLATION", "  OK"), "\n")
+  cat("\nNote: violations do not affect ARIMA handoff validity.\n")
+
+  p1 <- ggplot(aug, aes(.fitted, .resid)) +
+    geom_point(alpha = 0.45) +
+    geom_hline(yintercept = 0, linetype = 2) +
+    geom_smooth(se = FALSE, color = "steelblue") +
+    labs(title = paste0(city, ": Residuals vs Fitted"),
+         x = "Fitted", y = "Residuals") +
+    theme_minimal()
+
+  p2 <- ggplot(aug, aes(sample = .std.resid)) +
+    stat_qq(alpha = 0.45) + stat_qq_line() +
+    labs(title = paste0(city, ": Normal Q-Q"),
+         x = "Theoretical Quantiles", y = "Std Residuals") +
+    theme_minimal()
+
+  p3 <- ggplot(aug, aes(.fitted, sqrt(abs(.std.resid)))) +
+    geom_point(alpha = 0.45) +
+    geom_smooth(se = FALSE, color = "steelblue") +
+    labs(title = paste0(city, ": Scale-Location"),
+         x = "Fitted", y = "sqrt(|Std Residuals|)") +
+    theme_minimal()
+
+  p4 <- ggplot(aug, aes(.hat, .std.resid)) +
+    geom_point(alpha = 0.45) +
+    geom_hline(yintercept = 0, linetype = 2) +
+    labs(title = paste0(city, ": Residuals vs Leverage"),
+         x = "Leverage (hat)", y = "Std Residuals") +
+    theme_minimal()
+
+  print(grid.arrange(p1, p2, p3, p4, ncol = 2,
+                     top = paste0(city, " - OLS PCR Diagnostics (k = ",
+                                  pcr_obj$k, ")")))
+}
+
+run_ols_diagnostics(pcr_balt)
+run_ols_diagnostics(pcr_br)
+run_ols_diagnostics(pcr_stl)
+```
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PART III — ARIMA HANDOFF: RESIDUAL TIME SERIES DIAGNOSTICS
+# ══════════════════════════════════════════════════════════════════════════════
+# OLS assumption violations are irrelevant here. ARIMA does not require them.
+# What matters: (1) autocorrelation is present, (2) stationarity status known,
+# (3) structural breakpoints are identified and labelled in the export.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── 10. Residuals Over Time ───────────────────────────────────────────────────
+
+```{r residuals_over_time, fig.height=4}
+resid_all <- bind_rows(pcr_balt$resid_tbl, pcr_br$resid_tbl, pcr_stl$resid_tbl)
+
+ggplot(resid_all, aes(x = date, y = residual)) +
+  geom_line(alpha = 0.6, linewidth = 0.4) +
+  geom_hline(yintercept = 0, linetype = 2, color = "tomato") +
+  geom_smooth(se = FALSE, color = "steelblue", linewidth = 0.7) +
+  facet_wrap(~ city, nrow = 1, scales = "free") +
+  labs(
+    title    = "PCR Residuals Over Time",
+    subtitle = "Series passed to ARIMA — inspect for visible breaks and variance shifts",
+    x = "Date", y = "Residual"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(plot.title    = element_text(face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5, color = "gray40"),
+        panel.grid.minor = element_blank())
+```
+
+# ── 11. Stationarity Tests ────────────────────────────────────────────────────
+
+```{r stationarity_tests}
+run_stationarity_tests <- function(pcr_obj) {
+  city   <- pcr_obj$city
+  resids <- pcr_obj$resid_tbl$residual
+
+  cat("\n=========================================\n")
+  cat(city, "- Stationarity Tests\n")
+  cat("=========================================\n")
+
+  # ADF: H0 = unit root (non-stationary). p < 0.05 -> stationary.
+  adf  <- tseries::adf.test(resids, alternative = "stationary")
+  # KPSS: H0 = stationary. p < 0.05 -> NON-stationary.
+  kpss <- tseries::kpss.test(resids, null = "Level")
+
+  cat("\nADF  — H0: non-stationary | p =", round(adf$p.value,  4),
+      ifelse(adf$p.value  < 0.05, "  -> STATIONARY",     "  -> NON-STATIONARY"), "\n")
+  cat("KPSS — H0: stationary     | p =", round(kpss$p.value, 4),
+      ifelse(kpss$p.value < 0.05, "  -> NON-STATIONARY", "  -> STATIONARY"),     "\n")
+
+  stationary <- adf$p.value < 0.05 && kpss$p.value >= 0.05
+  conflict   <- adf$p.value < 0.05 && kpss$p.value <  0.05
+
+  cat("\nVerdict: ")
+  if (stationary) {
+    cat("STATIONARY — hand off as-is, d = 0\n")
+  } else if (conflict) {
+    cat("BORDERLINE — try d = 0 and d = 1, compare AIC\n")
+  } else {
+    cat("NON-STATIONARY — use d = 1 in ARIMA\n")
+  }
+
+  tibble(
+    city         = city,
+    adf_p        = round(adf$p.value,  4),
+    kpss_p       = round(kpss$p.value, 4),
+    adf_verdict  = ifelse(adf$p.value  < 0.05, "Stationary",     "Non-stationary"),
+    kpss_verdict = ifelse(kpss$p.value < 0.05, "Non-stationary", "Stationary")
+  )
+}
+
+stat_balt <- run_stationarity_tests(pcr_balt)
+stat_br   <- run_stationarity_tests(pcr_br)
+stat_stl  <- run_stationarity_tests(pcr_stl)
+
+stationarity_summary <- bind_rows(stat_balt, stat_br, stat_stl)
+```
+
+# ── 12. ACF & PACF ────────────────────────────────────────────────────────────
+
+```{r acf_pacf, fig.height=4}
+# ACF  -> MA order (q)
+# PACF -> AR order (p)
+# Ljung-Box: H0 = white noise. p < 0.05 -> autocorrelation present -> ARIMA useful
+
+plot_acf_pacf <- function(pcr_obj) {
+  city   <- pcr_obj$city
+  resids <- pcr_obj$resid_tbl$residual
+
+  lb <- Box.test(resids, lag = 20, type = "Ljung-Box")
+
+  cat("\n=========================================\n")
+  cat(city, "- ACF / PACF\n")
+  cat("=========================================\n")
+  cat("Ljung-Box (lag 20) p =", round(lb$p.value, 4),
+      ifelse(lb$p.value < 0.05,
+             "  -> AUTOCORRELATION PRESENT — ARIMA useful",
+             "  -> No autocorrelation — residuals may be white noise"), "\n")
+
+  par(mfrow = c(1, 2))
+  forecast::Acf(resids,  main = paste0(city, ": ACF"),  lag.max = 40)
+  forecast::Pacf(resids, main = paste0(city, ": PACF"), lag.max = 40)
+  par(mfrow = c(1, 1))
+
+  invisible(lb$p.value)
+}
+
+lb_balt <- plot_acf_pacf(pcr_balt)
+lb_br   <- plot_acf_pacf(pcr_br)
+lb_stl  <- plot_acf_pacf(pcr_stl)
+```
+
+# ── 13. Handoff Summary ───────────────────────────────────────────────────────
+
+```{r handoff_summary}
+handoff_summary <- stationarity_summary %>%
+  mutate(
+    ljung_box_p     = c(lb_balt, lb_br, lb_stl),
+    autocorrelation = ifelse(ljung_box_p < 0.05, "Yes", "No"),
+    recommended_d   = case_when(
+      adf_verdict == "Stationary" & kpss_verdict == "Stationary" ~ 0L,
+      adf_verdict == "Non-stationary" | kpss_verdict == "Non-stationary" ~ 1L,
+      TRUE ~ NA_integer_
+    ),
+    arima_ready = ifelse(
+      autocorrelation == "Yes",
+      "YES — hand off",
+      "CHECK — may be white noise"
+    )
+  ) %>%
+  select(city, adf_p, adf_verdict, kpss_p, kpss_verdict,
+         ljung_box_p, autocorrelation, recommended_d, arima_ready)
+
+cat("=== ARIMA Handoff Summary ===\n")
+print(handoff_summary)
+
+cat("\n\nNotes for groupmate:\n")
+cat("- 'residual' column in each CSV is the series to model\n")
+cat("- 'recommended_d': suggested ARIMA differencing order (0 = none, 1 = first-difference)\n")
+cat("- Note: series contain data gaps — split at gaps before fitting, do not bridge them\n")
+cat("- Re-run ADF/KPSS/Ljung-Box on each segment individually after splitting\n")
+```
+
+# ── 14. Export CSVs ───────────────────────────────────────────────────────────
+
+```{r export}
+# PCA
+write_csv(variance_all, "pca_variance.csv")
+write_csv(loadings_all, "pca_loadings.csv")
+write_csv(scores_all,   "pca_scores.csv")
+
+# PCR residuals (primary handoff files)
+write_csv(pcr_balt$resid_tbl, "pcr_residuals_baltimore.csv")
+write_csv(pcr_br$resid_tbl,   "pcr_residuals_baton_rouge.csv")
+write_csv(pcr_stl$resid_tbl,  "pcr_residuals_st_louis.csv")
+
+# PCR model metrics
+write_csv(pcr_metrics, "pcr_metrics.csv")
+
+# ARIMA handoff summary
+write_csv(handoff_summary, "arima_handoff_summary.csv")
+
+cat("Saved:\n",
+    "  pcr_residuals_baltimore.csv    (cols: city, date, y, fitted, residual)\n",
+    "  pcr_residuals_baton_rouge.csv\n",
+    "  pcr_residuals_st_louis.csv\n",
+    "  pca_variance.csv\n",
+    "  pca_loadings.csv\n",
+    "  pca_scores.csv\n",
+    "  pcr_metrics.csv\n",
+    "  arima_handoff_summary.csv\n")
+```
