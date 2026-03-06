@@ -1,0 +1,450 @@
+---
+title: 'ARIMA Modeling of PCR Residuals: Baltimore, Baton Rouge, St. Louis'
+output:
+  pdf_document: default
+  html_document: default
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                      fig.width = 8, fig.height = 5)
+```
+
+# ── 0. Libraries ─────────────────────────────────────────────────────────────
+
+```{r libraries}
+library(tidyverse)
+library(forecast)    # auto.arima, Acf, Pacf, checkresiduals
+library(tseries)     # adf.test, kpss.test
+library(lmtest)      # coeftest
+library(gridExtra)
+
+library(conflicted)
+conflict_prefer("filter",    "dplyr")
+conflict_prefer("lag",       "dplyr")
+conflict_prefer("select",    "dplyr")
+```
+
+# ── 1. Load PCR Residuals ────────────────────────────────────────────────────
+
+```{r load_data}
+resid_balt <- read_csv("pcr_residuals_baltimore.csv",   show_col_types = FALSE)
+resid_br   <- read_csv("pcr_residuals_baton_rouge.csv", show_col_types = FALSE)
+resid_stl  <- read_csv("pcr_residuals_st_louis.csv",    show_col_types = FALSE)
+
+resid_all <- bind_rows(resid_balt, resid_br, resid_stl) %>%
+  mutate(date = as.Date(date)) %>%
+  arrange(city, date)
+
+cat("Rows per city:\n")
+resid_all %>% count(city) %>% print()
+```
+
+# ── 2. Detect and Split at Data Gaps ─────────────────────────────────────────
+# The handoff notes warn about data gaps. We identify gaps where consecutive
+# observations are separated by more than a threshold (e.g., >2× the median
+# spacing), then split into contiguous segments.
+
+```{r split_segments}
+GAP_MULTIPLIER <- 2  # gap = spacing > GAP_MULTIPLIER × median spacing
+
+split_into_segments <- function(df) {
+  df <- df %>% arrange(date)
+  diffs       <- as.numeric(diff(df$date))
+  med_spacing <- median(diffs, na.rm = TRUE)
+  gap_thresh  <- GAP_MULTIPLIER * med_spacing
+
+  gap_idx <- which(diffs > gap_thresh)
+
+  if (length(gap_idx) == 0) {
+    df$segment <- 1L
+    return(df)
+  }
+
+  breaks   <- c(0, gap_idx, nrow(df))
+  seg_ids  <- rep(seq_along(diff(breaks)), times = diff(breaks))
+  df$segment <- seg_ids
+  df
+}
+
+resid_segmented <- resid_all %>%
+  group_by(city) %>%
+  group_modify(~ split_into_segments(.x)) %>%
+  ungroup()
+
+seg_summary <- resid_segmented %>%
+  group_by(city, segment) %>%
+  summarise(
+    n          = n(),
+    start_date = min(date),
+    end_date   = max(date),
+    .groups    = "drop"
+  )
+
+cat("=== Segment Summary ===\n")
+print(seg_summary)
+cat("\nSegments with < 30 observations will be skipped for ARIMA fitting.\n")
+```
+
+# ── 3. Per-Segment Stationarity & Autocorrelation Tests ──────────────────────
+
+```{r segment_tests}
+MIN_OBS <- 30   # minimum segment length for reliable ARIMA
+
+run_segment_tests <- function(df_seg) {
+  city <- unique(df_seg$city)
+  seg  <- unique(df_seg$segment)
+  r    <- df_seg$residual
+
+  if (length(r) < MIN_OBS) {
+    cat(sprintf("  [%s | seg %d] n=%d — SKIPPED (< %d obs)\n",
+                city, seg, length(r), MIN_OBS))
+    return(tibble(
+      city = city, segment = seg, n = length(r),
+      adf_p = NA, kpss_p = NA, ljung_box_p = NA,
+      stationary = NA, autocorrelation = NA, recommended_d = NA_integer_,
+      skip = TRUE
+    ))
+  }
+
+  adf  <- tseries::adf.test(r, alternative = "stationary")
+  kpss <- tseries::kpss.test(r, null = "Level")
+  lb   <- Box.test(r, lag = min(20, floor(length(r) / 5)), type = "Ljung-Box")
+
+  stat_adf  <- adf$p.value < 0.05
+  stat_kpss <- kpss$p.value >= 0.05
+  stationary <- stat_adf & stat_kpss
+
+  rec_d <- if (stationary) 0L else 1L
+
+  cat(sprintf("  [%s | seg %d] n=%d | ADF p=%.4f (%s) | KPSS p=%.4f (%s) | LB p=%.4f (%s) | d=%d\n",
+              city, seg, length(r),
+              adf$p.value,  ifelse(stat_adf,  "stat", "NON-stat"),
+              kpss$p.value, ifelse(stat_kpss, "stat", "NON-stat"),
+              lb$p.value,   ifelse(lb$p.value < 0.05, "autocorr", "white noise"),
+              rec_d))
+
+  tibble(
+    city            = city,
+    segment         = seg,
+    n               = length(r),
+    adf_p           = round(adf$p.value,  4),
+    kpss_p          = round(kpss$p.value, 4),
+    ljung_box_p     = round(lb$p.value,   4),
+    stationary      = stationary,
+    autocorrelation = lb$p.value < 0.05,
+    recommended_d   = rec_d,
+    skip            = FALSE
+  )
+}
+
+cat("=== Per-Segment Stationarity & Autocorrelation ===\n")
+seg_tests <- resid_segmented %>%
+  group_by(city, segment) %>%
+  group_modify(~ run_segment_tests(.x)) %>%
+  ungroup()
+
+print(seg_tests)
+```
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PART I — AUTO.ARIMA FITTING
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── 4. Fit ARIMA per Segment ─────────────────────────────────────────────────
+
+```{r fit_arima}
+fit_segment_arima <- function(df_seg, seg_info) {
+  city <- unique(df_seg$city)
+  seg  <- unique(df_seg$segment)
+  r    <- df_seg$residual
+
+  info <- seg_info %>% filter(city == !!city, segment == !!seg)
+  if (nrow(info) == 0 || info$skip) return(NULL)
+
+  # Use recommended_d as starting constraint for auto.arima
+  rec_d <- info$recommended_d
+
+  # auto.arima with stepwise + approximation for speed,
+  # then refit with exact ML if desired
+  fit <- tryCatch(
+    auto.arima(r,
+               d             = rec_d,
+               max.p         = 5,
+               max.q         = 5,
+               max.order     = 10,
+               seasonal      = FALSE,   # no seasonality assumed
+               stepwise      = TRUE,
+               approximation = FALSE,
+               ic            = "aicc"),
+    error = function(e) {
+      cat(sprintf("  [%s | seg %d] auto.arima FAILED: %s\n", city, seg, e$message))
+      NULL
+    }
+  )
+
+  if (is.null(fit)) return(NULL)
+
+  ord <- arimaorder(fit)
+  cat(sprintf("  [%s | seg %d] -> ARIMA(%d,%d,%d) | AICc=%.2f | BIC=%.2f\n",
+              city, seg, ord[1], ord[2], ord[3], fit$aicc, fit$bic))
+
+  list(
+    city    = city,
+    segment = seg,
+    n       = length(r),
+    order   = ord,
+    fit     = fit,
+    resids  = residuals(fit),
+    dates   = df_seg$date
+  )
+}
+
+arima_fits <- resid_segmented %>%
+  group_by(city, segment) %>%
+  group_split() %>%
+  map(~ fit_segment_arima(.x, seg_tests)) %>%
+  compact()   # drop NULLs (skipped segments)
+
+cat(sprintf("\nFitted %d ARIMA models across all city-segments.\n", length(arima_fits)))
+```
+
+# ── 5. ARIMA Model Summary Table ─────────────────────────────────────────────
+
+```{r arima_summary_table}
+arima_summary <- map_dfr(arima_fits, function(af) {
+  ord <- af$order
+  fit <- af$fit
+  tibble(
+    city    = af$city,
+    segment = af$segment,
+    n       = af$n,
+    p       = ord[1],
+    d       = ord[2],
+    q       = ord[3],
+    model   = sprintf("ARIMA(%d,%d,%d)", ord[1], ord[2], ord[3]),
+    aicc    = round(fit$aicc, 2),
+    bic     = round(fit$bic,  2),
+    sigma2  = round(fit$sigma2, 4),
+    log_lik = round(fit$loglik, 2)
+  )
+})
+
+cat("=== ARIMA Model Summary ===\n")
+print(arima_summary)
+```
+
+# ── 6. Coefficient Tables ────────────────────────────────────────────────────
+
+```{r coef_tables}
+for (af in arima_fits) {
+  cat(sprintf("\n--- %s | Segment %d | %s ---\n",
+              af$city, af$segment,
+              sprintf("ARIMA(%d,%d,%d)", af$order[1], af$order[2], af$order[3])))
+
+  if (length(coef(af$fit)) == 0) {
+    cat("  (White noise — no coefficients to test)\n")
+  } else {
+    print(coeftest(af$fit))
+  }
+}
+```
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PART II — ARIMA DIAGNOSTICS
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── 7. Ljung-Box on ARIMA Residuals (White Noise Check) ──────────────────────
+
+```{r arima_ljung_box}
+arima_diag <- map_dfr(arima_fits, function(af) {
+  r   <- residuals(af$fit)
+  n   <- length(r)
+  lag <- min(20, floor(n / 5))
+  lb  <- Box.test(r, lag = lag, type = "Ljung-Box")
+  sw  <- if (n >= 5 & n <= 5000) shapiro.test(r) else list(p.value = NA)
+
+  tibble(
+    city           = af$city,
+    segment        = af$segment,
+    model          = sprintf("ARIMA(%d,%d,%d)", af$order[1], af$order[2], af$order[3]),
+    lb_lag         = lag,
+    lb_p           = round(lb$p.value, 4),
+    white_noise    = ifelse(lb$p.value >= 0.05, "YES", "NO - residual autocorrelation"),    shapiro_p      = round(sw$p.value, 4),
+    normal_resids  = ifelse(sw$p.value >= 0.05, "YES", "NO (not required for ARIMA)")
+  )
+})
+
+cat("=== ARIMA Residual Diagnostics ===\n")
+print(arima_diag)
+```
+
+# ── 8. Diagnostic Plots (ACF, Histogram, Residual Series) ────────────────────
+
+```{r arima_diagnostic_plots, fig.height=6}
+for (af in arima_fits) {
+  cat(sprintf("\n--- %s | Segment %d ---\n", af$city, af$segment))
+
+  r <- residuals(af$fit)
+
+  p1 <- ggplot(tibble(date = af$dates, residual = as.numeric(r)),
+               aes(date, residual)) +
+    geom_line(alpha = 0.6) +
+    geom_hline(yintercept = 0, linetype = 2, color = "tomato") +
+    labs(title = "ARIMA Residuals Over Time", x = "Date", y = "Residual") +
+    theme_minimal()
+
+  p2 <- ggplot(tibble(r = as.numeric(r)), aes(r)) +
+    geom_histogram(aes(y = after_stat(density)), bins = 30,
+                   fill = "steelblue", alpha = 0.6) +
+    stat_function(fun = dnorm,
+                  args = list(mean = mean(r), sd = sd(r)),
+                  color = "tomato", linewidth = 0.8) +
+    labs(title = "Residual Distribution", x = "Residual", y = "Density") +
+    theme_minimal()
+
+  p3 <- ggplot(tibble(r = as.numeric(r)), aes(sample = r)) +
+    stat_qq(alpha = 0.45) + stat_qq_line() +
+    labs(title = "Normal Q-Q", x = "Theoretical", y = "Sample") +
+    theme_minimal()
+
+  # ACF of ARIMA residuals
+  acf_vals <- acf(r, lag.max = 30, plot = FALSE)
+  acf_df   <- tibble(lag = acf_vals$lag[-1], acf = acf_vals$acf[-1])
+  ci       <- qnorm(0.975) / sqrt(length(r))
+
+  p4 <- ggplot(acf_df, aes(lag, acf)) +
+    geom_hline(yintercept = c(-ci, ci), linetype = 2, color = "steelblue") +
+    geom_hline(yintercept = 0) +
+    geom_segment(aes(xend = lag, yend = 0)) +
+    labs(title = "ACF of ARIMA Residuals", x = "Lag", y = "ACF") +
+    theme_minimal()
+
+  title_str <- sprintf("%s | Seg %d | ARIMA(%d,%d,%d)",
+                       af$city, af$segment,
+                       af$order[1], af$order[2], af$order[3])
+
+  print(grid.arrange(p1, p2, p3, p4, ncol = 2, top = title_str))
+}
+```
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PART III — FORECASTING & RECONSTRUCTION
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── 9. Forecast ARIMA Residuals (h-step ahead) ──────────────────────────────
+
+```{r forecast_arima, fig.height=4}
+H_STEPS <- 30   # forecast horizon (number of future time steps)
+
+forecasts <- map(arima_fits, function(af) {
+  fc <- forecast(af$fit, h = H_STEPS, level = c(80, 95))
+
+  title_str <- sprintf("%s | Seg %d | ARIMA(%d,%d,%d) — %d-step Forecast",
+                       af$city, af$segment,
+                       af$order[1], af$order[2], af$order[3], H_STEPS)
+
+  print(autoplot(fc) +
+    labs(title = title_str, x = "Index", y = "Residual Forecast") +
+    theme_minimal(base_size = 11) +
+    theme(plot.title = element_text(face = "bold", hjust = 0.5)))
+
+  list(city = af$city, segment = af$segment, forecast = fc)
+})
+```
+
+# ── 10. Reconstruct Predicted y = OLS Fitted + ARIMA Forecast ────────────────
+# This shows how to combine PCR fitted values with ARIMA residual forecasts
+# to get final predictions. For in-sample, we add ARIMA fitted residuals back
+# to the OLS fitted values.
+
+```{r reconstruct, fig.height=4}
+for (af in arima_fits) {
+  city <- af$city
+  seg  <- af$segment
+
+  # Get the original residual data for this segment
+  seg_data <- resid_segmented %>%
+    filter(city == !!city, segment == !!seg)
+
+  # In-sample reconstruction: y_hat_final = OLS_fitted + ARIMA_fitted_residual
+  arima_fitted_resid <- af$fit$fitted   # ARIMA's in-sample fitted values of the residual
+  # Note: the original OLS residual = y - OLS_fitted
+  # ARIMA models that residual, so:
+  # y_hat_combined = OLS_fitted + ARIMA_fitted(residual)
+
+  recon <- seg_data %>%
+    mutate(
+      arima_fitted_resid = as.numeric(arima_fitted_resid),
+      y_hat_combined     = fitted + arima_fitted_resid
+    )
+
+  rmse_ols      <- sqrt(mean((recon$y - recon$fitted)^2))
+  rmse_combined <- sqrt(mean((recon$y - recon$y_hat_combined)^2))
+
+  cat(sprintf("\n%s | Seg %d | OLS RMSE = %.4f | OLS+ARIMA RMSE = %.4f | Improvement = %.1f%%\n",
+              city, seg, rmse_ols, rmse_combined,
+              (1 - rmse_combined / rmse_ols) * 100))
+
+  p <- recon %>%
+    select(date, Observed = y, `OLS Only` = fitted, `OLS + ARIMA` = y_hat_combined) %>%
+    pivot_longer(-date, names_to = "Series", values_to = "value") %>%
+    ggplot(aes(date, value, color = Series)) +
+    geom_line(alpha = 0.7) +
+    scale_color_manual(values = c("Observed" = "black",
+                                  "OLS Only" = "gray60",
+                                  "OLS + ARIMA" = "steelblue")) +
+    labs(
+      title    = sprintf("%s | Seg %d: Observed vs Fitted", city, seg),
+      subtitle = sprintf("OLS RMSE=%.3f → OLS+ARIMA RMSE=%.3f (%.1f%% improvement)",
+                         rmse_ols, rmse_combined,
+                         (1 - rmse_combined / rmse_ols) * 100),
+      x = "Date", y = seg_data$city[1] %>%
+        { if (. == "Baton Rouge") "TNMOC" else "PM2.5" }
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(plot.title    = element_text(face = "bold", hjust = 0.5),
+          plot.subtitle = element_text(hjust = 0.5, color = "gray40"),
+          legend.position = "bottom")
+
+  print(p)
+}
+```
+
+# ── 11. Final Summary & Export ────────────────────────────────────────────────
+
+```{r final_export}
+# Combine everything
+final_summary <- arima_summary %>%
+  left_join(arima_diag %>% select(city, segment, lb_p, white_noise, shapiro_p),
+            by = c("city", "segment"))
+
+cat("=== Final ARIMA Summary ===\n")
+print(final_summary)
+
+write_csv(arima_summary, "arima_model_summary.csv")
+write_csv(arima_diag,    "arima_diagnostics.csv")
+
+# Export per-segment fitted values for reconstruction
+for (af in arima_fits) {
+  seg_data <- resid_segmented %>%
+    filter(city == af$city, segment == af$segment)
+
+  export_df <- seg_data %>%
+    mutate(
+      arima_fitted_resid = as.numeric(af$fit$fitted),
+      y_hat_combined     = fitted + arima_fitted_resid,
+      arima_residual     = as.numeric(residuals(af$fit))
+    )
+
+  fname <- sprintf("arima_fitted_%s_seg%d.csv",
+                   tolower(gsub(" ", "_", af$city)), af$segment)
+  write_csv(export_df, fname)
+  cat("  Saved:", fname, "\n")
+}
+
+cat("\nAlso saved:\n")
+cat("  arima_model_summary.csv\n")
+cat("  arima_diagnostics.csv\n")
+```
